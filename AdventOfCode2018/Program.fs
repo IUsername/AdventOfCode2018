@@ -17,10 +17,11 @@ let main argv =
 
     let data = Three.dataSet
     let lines = One.splitLines data
-    let grid = Three.Grid (2000,2000)
-    
-    Three.parseTextSeq lines |>  Three.populateGrid grid
+    let scraps = Three.parseTextSeq lines
+    let grid = Three.Grid (2000,2000)    
+    Three.populateGrid grid scraps
     printfn "Day 3 - Part 1: Overlapped scrap squares %A" (grid.Count (fun i -> i > 1))
+    printfn "Day 3 - Part 2: Non-overlapped scrap ID %i" (Three.notOverlappedId grid scraps).id
 
     Console.ReadLine() |> ignore
     0 // return an integer exit code

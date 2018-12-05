@@ -26,6 +26,13 @@ type Grid(N: int, M: int) =
         internalArray |> Array2D.iter (fun s -> if f s then count <- count + 1)
         count
 
+    member __.IterArea (s:Scrap) =
+        seq {
+            for x in s.position.x..s.position.x+s.size.width-1 do
+                for y in s.position.y..s.position.y+s.size.height-1 do
+                    yield internalArray.[x,y]
+            }
+
 let (|Regex|_|) pattern input =
     let m = System.Text.RegularExpressions.Regex.Match(input, pattern)
     if m.Success then Some(List.tail [ for g in m.Groups -> g.Value ])
@@ -42,6 +49,12 @@ let parseTextSeq (lines: seq<string>) =
 
 let populateGrid (grid:Grid) (scraps:seq<Scrap>) =
     Seq.iter (fun s -> grid.AddScrap s) scraps
+
+let notOverlapped (grid:Grid) (scrap:Scrap) =
+    grid.IterArea scrap |> Seq.forall (fun i -> i=1)
+
+let notOverlappedId (grid:Grid) (scraps:seq<Scrap>) = 
+    Seq.find (notOverlapped grid) scraps    
 
 let dataSet = @"
 #1 @ 393,863: 11x29
