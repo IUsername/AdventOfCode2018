@@ -1,17 +1,9 @@
 ﻿module One
 
-open System
 open System.Collections.Generic
 
-let splitLines (text: string) = 
-    text.Split(Environment.NewLine.ToCharArray(), StringSplitOptions.RemoveEmptyEntries)   
-    |> Seq.ofArray   
-
 let textLinesSeqToInt (lines: seq<string>) =
-    Seq.map (fun s -> s |> int) lines
-        
-let parseAndCompute (values: seq<int>) =
-    values |> Seq.sum
+    Seq.map (fun s -> int s) lines
 
 let rec repeat items = 
     seq {
@@ -19,18 +11,18 @@ let rec repeat items =
         yield! repeat items
     }
 
-let rec accMatch acc (set:Set<int>) (e:IEnumerator<int>) =
+let rec firstAccInSet acc (set:Set<int>) (e:IEnumerator<int>) =
     match e.MoveNext() with
     | false -> acc
     | true ->
         let newAcc = acc + e.Current
         match (Set.contains newAcc set) with
         | true -> newAcc
-        | false -> accMatch newAcc (Set.add newAcc set) e 
+        | false -> firstAccInSet newAcc (Set.add newAcc set) e 
 
 let firstRepeatFreq values = 
     let numSeq = values |> repeat
-    accMatch 0 Set.empty (numSeq.GetEnumerator())        
+    firstAccInSet 0 Set.empty (numSeq.GetEnumerator())        
 
 let dataSet = @"
 +19

@@ -33,14 +33,9 @@ type Grid(N: int, M: int) =
                     yield internalArray.[x,y]
             }
 
-let (|Regex|_|) pattern input =
-    let m = System.Text.RegularExpressions.Regex.Match(input, pattern)
-    if m.Success then Some(List.tail [ for g in m.Groups -> g.Value ])
-    else None
-
 let parseScrap text = 
     match text with
-    | Regex @"#(\d+)\s@\s(\d+),(\d+):\s(\d+)x(\d+)\b" [id; x; y; w; h] -> 
+    | Parsing.Regex @"#(\d+)\s@\s(\d+),(\d+):\s(\d+)x(\d+)\b" [id; x; y; w; h] -> 
         Some {Scrap.id = int id; position = {x = int x; y = int y}; size = {width = int w; height = int h}}
     | _ -> None
 
