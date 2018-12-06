@@ -32,10 +32,11 @@ let main argv =
     let consistent = stamped |> Four.sleepyPerGuard |> List.sortByDescending (fun p -> p.freq) |> List.head
     printfn "Day 4 - Part 2: Most consistent is guard #%i at minute %i multiplied to %i" consistent.id consistent.minute (consistent.id * consistent.minute)
 
-    let final = Five.dataSet |> Five.toCharList |> Five.reduce
-    printfn "Day 5 - Part 1: Unit count %i" final.Length
-
-    
+    let dataList = Five.dataSet |> Five.toCharList
+    let reduced = dataList |> Five.reduce
+    printfn "Day 5 - Part 1: Unit count %i" reduced.Length
+    let (char, len) = reduced |> Five.removedCharSeq |> Seq.sortBy (fun (_,len) -> len) |> Seq.head 
+    printfn "Day 5 - Part 2: Greatest impact was %A with final size of %i" char len    
 
     Console.ReadLine() |> ignore
     0 // return an integer exit code
