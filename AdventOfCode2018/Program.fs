@@ -38,5 +38,13 @@ let main argv =
     let (char, len) = reduced |> Five.removedCharSeq |> Seq.sortBy (fun (_,len) -> len) |> Seq.head 
     printfn "Day 5 - Part 2: Greatest impact was %A with final size of %i" char len    
 
+    let pegs = Six.dataSet |> Parsing.splitLines |> Seq.map Six.parseCoord |> Six.coordToPegSeq
+    let map = Six.Locations (400,500)
+    pegs |> Seq.iter (fun p -> map.AddPeg p)
+    let edgeIds = map.EdgeIds |> Set.ofSeq
+    let areas = map.Areas |> Seq.filter (fun (id,_) -> not (edgeIds.Contains id))
+    let largest = areas |> Seq.map snd |> Seq.sortDescending |> Seq.head
+    printfn "Day 6 - Part 1: Largest non-infinite size is %i" largest
+
     Console.ReadLine() |> ignore
     0 // return an integer exit code
