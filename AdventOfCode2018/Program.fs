@@ -28,9 +28,7 @@ let main argv =
     let stamped = ordered |> Four.stampWithId |> List.ofSeq
     let mostSleep = stamped |> Four.minutesAsleepPerShiftSeq |> Four.sumShifts |> Seq.sortByDescending (fun s -> s.minutes) |> Seq.head
     let sleepy = stamped |> Four.findMostSleepyMinuteById mostSleep.id
-
     printfn "Day 4 - Part 1: Most sleepy guard is #%i at minute %i multiplied to %i" sleepy.id sleepy.minute (sleepy.id * sleepy.minute)
-
     let consistent = stamped |> Four.sleepyPerGuard |> List.sortByDescending (fun p -> p.freq) |> List.head
     printfn "Day 4 - Part 2: Most consistent is guard #%i at minute %i multiplied to %i" consistent.id consistent.minute (consistent.id * consistent.minute)
     

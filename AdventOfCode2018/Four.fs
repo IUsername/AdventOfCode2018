@@ -48,6 +48,8 @@ let stampWithId (orderedEvents:seq<GuardEvent>) =
     orderedEvents.GetEnumerator() |> stampEventsEnumerator 0
 
 let minutesAsleepPerShiftSeq (events:StampedGuardEvent list) =
+    let addMinutes (s:ShiftContext) (t:DateTime) (t':DateTime) = 
+        {id = s.id; minutes = s.minutes + (t' - t).Minutes}
     let rec minutesAsleepPerShift (s:ShiftContext) (fellAsleep:DateTime option) (events:StampedGuardEvent list) = 
         seq {
             match events with
@@ -58,7 +60,7 @@ let minutesAsleepPerShiftSeq (events:StampedGuardEvent list) =
                             if s.minutes > 0 then yield s
                             yield! minutesAsleepPerShift {ShiftContext.id = i; minutes = 0} None t
                         | Sleeps -> yield! minutesAsleepPerShift s (Some time) t
-                        | Wakes -> yield! minutesAsleepPerShift {ShiftContext.id = s.id; minutes = s.minutes + (time - fellAsleep.Value).Minutes} None t
+                        | Wakes -> yield! minutesAsleepPerShift (addMinutes s fellAsleep.Value time) None t
             }
     events |> minutesAsleepPerShift {id=0; minutes=0} None
 
@@ -67,12 +69,7 @@ let sumShifts (shifts:seq<ShiftContext>) =
 
 let toMinuteAsleepSeq (events:StampedGuardEvent list) =
     let genMinutesBetweenTimes (s:DateTime) (e:DateTime) = 
-        let startMin = s.Minute
-        let endMin = e.Minute
-        seq {
-            for i in [startMin..endMin] do
-                yield i
-        }
+        seq { for i in [s.Minute..e.Minute] do yield i }
     let rec minuteAsleepPerShift (fellAsleep:DateTime option) (events:StampedGuardEvent list) = 
         seq {
             match events with            
@@ -101,8 +98,7 @@ let distinctIds (events:StampedGuardEvent list) =
 
 let sleepyPerGuard (events:StampedGuardEvent list) =
     let ids = distinctIds events
-    ids |> List.map (fun i -> findMostSleepyMinuteById i events)
-    
+    ids |> List.map (fun i -> findMostSleepyMinuteById i events)    
 
 let dataSet = @"
 [1518-10-14 00:05] falls asleep
