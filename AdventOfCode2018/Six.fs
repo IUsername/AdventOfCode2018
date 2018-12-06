@@ -1,17 +1,16 @@
 ﻿module Six
 
-type Coord = {x:int; y:int}
+type Coord = {x:int; y:int} with    
+    member this.DistanceTo (other:Coord) = 
+        abs (this.x - other.x) + abs (this.y - other.y)
 
 type Peg = {id:int; coord:Coord}
 
-type DistanceTo = {id:int; dist:int}
-
-let distance a b =
-    abs (a.x - b.x) + abs (a.y - b.y)
+type DistInfo = {id:int; dist:int}
 
 type Nearby = 
     | Unknown
-    | Single of DistanceTo
+    | Single of DistInfo
     | Multiple of int
 
 type Locations (N: int, M:int) = 
@@ -22,11 +21,11 @@ type Locations (N: int, M:int) =
         with get (c:Coord) = internalArray.[c.x,c.y]
         and  set (c:Coord) (value: Nearby) = internalArray.[c.x,c.y] <- value
 
-    member __.AddDist (c:Coord) (d:DistanceTo) =  
+    member __.AddDist (c:Coord) (d:DistInfo) =  
         let cur = distArray.[c.x,c.y]
         distArray.[c.x,c.y] <- cur + d.dist
 
-    member this.Update (c:Coord) (d:DistanceTo) =        
+    member this.Update (c:Coord) (d:DistInfo) =        
         this.AddDist c d
         match this.[c] with
         | Unknown -> this.[c] <- (Single d)
@@ -39,7 +38,7 @@ type Locations (N: int, M:int) =
         for x in 0..N-1 do
             for y in 0..M-1 do
                 let cur = {x=x; y=y}
-                let d = {id=p.id; dist = (distance cur p.coord)}
+                let d = {DistInfo.id=p.id; dist = (cur.DistanceTo p.coord)}
                 this.Update cur d    
                 
     member __.EdgeCoords =
@@ -57,12 +56,12 @@ type Locations (N: int, M:int) =
     member this.EdgeIds = 
         this.EdgeCoords 
         |> Seq.map (fun c -> this.[c]) 
-        |> Seq.choose (fun x -> match x with | Single dt -> Some dt.id | _ -> None)   
+        |> Seq.choose (function | Single dt -> Some dt.id | _ -> None)   
         
     member __.Areas =
         internalArray 
         |> Seq.cast<Nearby> 
-        |> Seq.choose (fun x -> match x with | Single dt -> Some dt.id | _ -> None)
+        |> Seq.choose (function | Single dt -> Some dt.id | _ -> None)
         |> Seq.countBy id
 
     member __.Distances max = 

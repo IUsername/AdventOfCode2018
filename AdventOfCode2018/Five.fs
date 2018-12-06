@@ -3,6 +3,7 @@
 let toCharList (s:string) =
     s.ToCharArray() |> List.ofArray
 
+// Must be tail recursive or we will see a stack overflow
 let removePairs f l =
     let rec boil acc p = function
         | [] -> match p with

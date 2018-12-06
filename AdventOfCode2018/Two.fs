@@ -3,8 +3,8 @@
 let explode (s:string) =
     [for c in s -> c]
 
-let hasPairOrTripletChars (id: string) = 
-    let counts = explode id |> Seq.countBy (fun c -> c)
+let hasPairOrTripletChars (i: string) = 
+    let counts = explode i |> Seq.countBy id
     let hasPair = Seq.exists (fun (_,c) -> c = 2) counts
     let hasTriplet = Seq.exists (fun (_,c) -> c = 3) counts
     (hasPair, hasTriplet)
@@ -41,7 +41,7 @@ let rec findMinDiff (ids:string list) (d:int, a:string, b:string) =
                     | _                      -> findMinDiff tail (d, a, b)
 
 let matchingChars (a: seq<char>) (b: seq<char>) =
-    Seq.zip a b |> Seq.where (fun (ca,cb) -> ca = cb) |> Seq.map (fun (a,_) -> a)
+    Seq.zip a b |> Seq.where (fun (ca,cb) -> ca = cb) |> Seq.map fst
 
 let implode (xs:seq<char>) = 
     let sb = System.Text.StringBuilder()

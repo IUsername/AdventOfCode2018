@@ -21,11 +21,11 @@ let parseEvent text =
         DateTime.ParseExact(t, "yyyy-MM-dd HH:mm", null) 
     match text with
     | Parsing.Regex @"\[(.+)\]\sfalls asleep\b" [t] -> 
-        Some {GuardEvent.time = parseDateTime t; action = GuardAction.Sleeps}
+        Some {GuardEvent.time = parseDateTime t; action = Sleeps}
     | Parsing.Regex @"\[(.+)\]\swakes up\b" [t] -> 
-        Some {GuardEvent.time = parseDateTime t; action = GuardAction.Wakes}
+        Some {GuardEvent.time = parseDateTime t; action = Wakes}
     | Parsing.Regex @"\[(.+)\]\sGuard \#(\d+)\sbegins shift\b" [t;id] -> 
-        Some {GuardEvent.time = parseDateTime t; action = GuardAction.StartShift (int id)}
+        Some {GuardEvent.time = parseDateTime t; action = StartShift (int id)}
     | _ -> None
 
 let parseEvents (lines: seq<string>) = 
@@ -65,7 +65,11 @@ let minutesAsleepPerShiftSeq (events:StampedGuardEvent list) =
     events |> minutesAsleepPerShift {id=0; minutes=0} None
 
 let sumShifts (shifts:seq<ShiftContext>) = 
-    shifts |> Seq.groupBy (fun s -> s.id) |> Seq.map (fun (id,s) -> {ShiftContext.id = id; minutes = s |> Seq.sumBy (fun s -> s.minutes) })
+    shifts 
+    |> Seq.groupBy (fun s -> s.id) 
+    |> Seq.map (fun (id,s) -> 
+                { ShiftContext.id = id; 
+                  minutes = s |> Seq.sumBy (fun s -> s.minutes) })
 
 let toMinuteAsleepSeq (events:StampedGuardEvent list) =
     let genMinutesBetweenTimes (s:DateTime) (e:DateTime) = 
@@ -84,20 +88,24 @@ let toMinuteAsleepSeq (events:StampedGuardEvent list) =
             }
     events |> minuteAsleepPerShift None
 
-let findMostSleepyMinuteById id (events:StampedGuardEvent list) =
-    let mostSleepyMinute (minutes:seq<int>) =
-        minutes |> Seq.countBy (fun m -> m) |> Seq.sortByDescending (fun (_,t) -> t) |> Seq.tryHead          
+let findMostSleepyMinuteById ident (events:StampedGuardEvent list) =
+    let mostSleepyMinute (minutes:seq<int>) = 
+        minutes 
+        |> Seq.countBy id 
+        |> Seq.sortByDescending snd 
+        |> Seq.tryHead          
     let filterEventsById id (events:StampedGuardEvent list) = 
-        events |> List.filter (fun s -> s.id = id)
-    let r = filterEventsById id events |> toMinuteAsleepSeq |> mostSleepyMinute
+        events 
+        |> List.filter (fun s -> s.id = id)
+    let r = events
+            |> filterEventsById ident  
+            |> toMinuteAsleepSeq 
+            |> mostSleepyMinute
     let (minute,freq) = defaultArg r (0,0)
-    {MostSleepyMinuteById.id = id; minute = minute ; freq = freq}
-
-let distinctIds (events:StampedGuardEvent list) =
-    events |> List.map (fun e -> e.id) |> List.distinct
+    {MostSleepyMinuteById.id = ident; minute = minute ; freq = freq}
 
 let sleepyPerGuard (events:StampedGuardEvent list) =
-    let ids = distinctIds events
+    let ids = events |> List.map (fun e -> e.id) |> List.distinct
     ids |> List.map (fun i -> findMostSleepyMinuteById i events)    
 
 let dataSet = @"

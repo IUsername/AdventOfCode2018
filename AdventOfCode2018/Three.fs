@@ -4,52 +4,48 @@ type Position = {x: int; y: int}
 
 type Size = {width: int; height: int}
 
-type Scrap = {id: int; position:Position; size:Size}
+type Scrap = {id: int; position:Position; size:Size} with
+    member this.AreaCoords =
+        seq {
+            for x in this.position.x..this.position.x+this.size.width-1 do
+                for y in this.position.y..this.position.y+this.size.height-1 do
+                    yield (x,y)
+            }
 
 type Grid(N: int, M: int) =
-    let internalArray = Array2D.zeroCreate<int> N M
+    let array = Array2D.zeroCreate<int> N M
 
-    member __.Item
-        with get(x: int, y: int) = internalArray.[x,y]
-        and  set(x: int, y: int) (value: int) = internalArray.[x,y] <- value
-
-    member this.Increment(x: int, y: int) (amount:int) = 
-        this.[x,y] <- this.[x,y] + amount        
+    member __.Increment(x: int, y: int) (amount:int) = 
+        array.[x,y] <- array.[x,y] + amount        
 
     member this.AddScrap(s: Scrap) =
-        for x in s.position.x..s.position.x+s.size.width-1 do
-            for y in s.position.y..s.position.y+s.size.height-1 do
-                this.Increment (x,y) 1  
+        s.AreaCoords |> Seq.iter (fun c -> this.Increment c 1) 
 
     member __.Count f =
-        let mutable count = 0
-        internalArray |> Array2D.iter (fun s -> if f s then count <- count + 1)
-        count
+        array |> Seq.cast<int> |> Seq.filter (fun s -> f s) |> Seq.length
 
     member __.IterArea (s:Scrap) =
-        seq {
-            for x in s.position.x..s.position.x+s.size.width-1 do
-                for y in s.position.y..s.position.y+s.size.height-1 do
-                    yield internalArray.[x,y]
-            }
+        s.AreaCoords |> Seq.map (fun (x,y) -> array.[x,y])
 
 let parseScrap text = 
     match text with
-    | Parsing.Regex @"#(\d+)\s@\s(\d+),(\d+):\s(\d+)x(\d+)\b" [id; x; y; w; h] -> 
-        Some {Scrap.id = int id; position = {x = int x; y = int y}; size = {width = int w; height = int h}}
+    | Parsing.Regex @"#(\d+)\D+(\d+)\D+(\d+)\D+(\d+)\D+(\d+)" [id; x; y; w; h] -> 
+        Some { Scrap.id = int id; 
+                position = {x = int x; y = int y}; 
+                size = {width = int w; height = int h} }
     | _ -> None
 
 let parseTextSeq (lines: seq<string>) = 
-    Seq.map parseScrap lines |> Seq.choose id
+    lines |> Seq.map parseScrap |> Seq.choose id
 
 let populateGrid (grid:Grid) (scraps:seq<Scrap>) =
-    Seq.iter (fun s -> grid.AddScrap s) scraps
+    scraps |> Seq.iter (fun s -> grid.AddScrap s) 
 
 let notOverlapped (grid:Grid) (scrap:Scrap) =
     grid.IterArea scrap |> Seq.forall (fun i -> i=1)
 
 let notOverlappedId (grid:Grid) (scraps:seq<Scrap>) = 
-    Seq.find (notOverlapped grid) scraps    
+    scraps |> Seq.find (notOverlapped grid) 
 
 let dataSet = @"
 #1 @ 393,863: 11x29
