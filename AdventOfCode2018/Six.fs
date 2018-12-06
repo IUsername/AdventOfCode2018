@@ -16,18 +16,24 @@ type Nearby =
 
 type Locations (N: int, M:int) = 
     let internalArray = Array2D.create N M Unknown
+    let distArray = Array2D.create N M 0
 
     member __.Item
         with get (c:Coord) = internalArray.[c.x,c.y]
         and  set (c:Coord) (value: Nearby) = internalArray.[c.x,c.y] <- value
 
-    member this.Update (c:Coord) (d:DistanceTo) =
+    member __.AddDist (c:Coord) (d:DistanceTo) =  
+        let cur = distArray.[c.x,c.y]
+        distArray.[c.x,c.y] <- cur + d.dist
+
+    member this.Update (c:Coord) (d:DistanceTo) =        
+        this.AddDist c d
         match this.[c] with
         | Unknown -> this.[c] <- (Single d)
         | Single p when p.dist > d.dist -> this.[c] <- (Single d)
         | Single p when p.dist = d.dist && p.id <> d.id -> this.[c] <- (Multiple p.dist)
         | Multiple p when p > d.dist -> this.[c] <- (Single d)
-        | _ -> ()
+        | _ -> ()    
 
     member this.AddPeg (p:Peg) =
         for x in 0..N-1 do
@@ -58,6 +64,11 @@ type Locations (N: int, M:int) =
         |> Seq.cast<Nearby> 
         |> Seq.choose (fun x -> match x with | Single dt -> Some dt.id | _ -> None)
         |> Seq.countBy id
+
+    member __.Distances max = 
+        distArray
+        |> Seq.cast<int>
+        |> Seq.filter (fun d -> d < max)
 
 let parseCoord text = 
     match text with
