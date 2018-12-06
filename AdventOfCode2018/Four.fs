@@ -14,6 +14,8 @@ type ShiftContext = {id:int; minutes:int }
 
 type StampedGuardEvent = {id:int; event:GuardEvent}
 
+type MostSleepyMinuteById = {id:int; minute:int; freq: int}
+
 let parseEvent text = 
     let parseDateTime t =
         DateTime.ParseExact(t, "yyyy-MM-dd HH:mm", null) 
@@ -85,8 +87,21 @@ let toMinuteAsleepSeq (events:StampedGuardEvent list) =
             }
     events |> minuteAsleepPerShift None
 
-let mostSleepyMinute (minutes:seq<int>) =
-    minutes |> Seq.countBy (fun m -> m) |> Seq.sortByDescending (fun (_,t) -> t) |> Seq.head
+let findMostSleepyMinuteById id (events:StampedGuardEvent list) =
+    let mostSleepyMinute (minutes:seq<int>) =
+        minutes |> Seq.countBy (fun m -> m) |> Seq.sortByDescending (fun (_,t) -> t) |> Seq.tryHead          
+    let filterEventsById id (events:StampedGuardEvent list) = 
+        events |> List.filter (fun s -> s.id = id)
+    let r = filterEventsById id events |> toMinuteAsleepSeq |> mostSleepyMinute
+    let (minute,freq) = defaultArg r (0,0)
+    {MostSleepyMinuteById.id = id; minute = minute ; freq = freq}
+
+let distinctIds (events:StampedGuardEvent list) =
+    events |> List.map (fun e -> e.id) |> List.distinct
+
+let sleepyPerGuard (events:StampedGuardEvent list) =
+    let ids = distinctIds events
+    ids |> List.map (fun i -> findMostSleepyMinuteById i events)
     
 
 let dataSet = @"
