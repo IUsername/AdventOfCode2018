@@ -52,6 +52,7 @@
     <Compile Include="Two.fs" />
     <Compile Include="Three.fs" />
     <Compile Include="Four.fs" />
+    <Compile Include="Five.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
     <Content Include="packages.config" />

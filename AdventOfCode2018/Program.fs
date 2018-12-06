@@ -31,6 +31,10 @@ let main argv =
     printfn "Day 4 - Part 1: Most sleepy guard is #%i at minute %i multiplied to %i" sleepy.id sleepy.minute (sleepy.id * sleepy.minute)
     let consistent = stamped |> Four.sleepyPerGuard |> List.sortByDescending (fun p -> p.freq) |> List.head
     printfn "Day 4 - Part 2: Most consistent is guard #%i at minute %i multiplied to %i" consistent.id consistent.minute (consistent.id * consistent.minute)
+
+    let final = Five.dataSet |> Five.toCharList |> Five.reduce
+    printfn "Day 5 - Part 1: Unit count %i" final.Length
+
     
 
     Console.ReadLine() |> ignore
