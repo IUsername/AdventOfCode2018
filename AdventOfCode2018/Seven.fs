@@ -12,7 +12,7 @@ let buildGraph s =
         match steps with
         | h::t when (g.ContainsKey h.id) ->
                 let deps' = (g.Item h.id).Add h.before
-                let map' = g.Add (h.id, deps')
+                let map' = g.Add (h.id, deps') |> addNode h.before
                 buildGraph' map' t
         | h::t ->   let map' = g.Add (h.id, Set.singleton h.before) |> addNode h.before
                     buildGraph' map' t
