@@ -5,6 +5,7 @@
 
 [<EntryPoint>]
 let main argv = 
+    (*
     let data = One.dataSet
     let values = Parsing.splitLines data |> One.textLinesSeqToInt
     printfn "Day 1 - Part 1: %i (should be 536)" (Seq.sum values)
@@ -48,6 +49,12 @@ let main argv =
 
     let nearArea = map.Distances 10000 |> Seq.length
     printfn "Day 6 - Part 2: Largest centralized size is %i" nearArea
+    *)
+
+    let steps = Seven.dataSet |> Parsing.splitLines |> Seq.map Seven.parseStep |> Seq.choose id |> Seq.toList
+    let graph = steps |> Seven.buildGraph 
+    let sorted = graph |> Seven.topoSort
+    printfn "Day 7 - Part 1: Order is %A" sorted
 
     Console.ReadLine() |> ignore
     0 // return an integer exit code
