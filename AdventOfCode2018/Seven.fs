@@ -127,9 +127,6 @@ Step C must be finished before step F can begin.
 Step A must be finished before step B can begin.
 Step A must be finished before step D can begin."
 
-//JDKPFABEUHOQTXVYMLZCNSIGRW
-//JDKPFABEUHOQTXVYMLZCNSIGRW
-//JDKPFABEUHOQTXVYMLZCNSIGRW
 //JDEKPFABTUHOQSXVYMLZCNIGRW
 let dataSet = @"
 Step J must be finished before step E can begin.
