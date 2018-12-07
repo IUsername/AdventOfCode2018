@@ -56,5 +56,8 @@ let main argv =
     let sorted = graph |> Seven.topoSort
     printfn "Day 7 - Part 1: Order is %A" sorted
 
+    let timed = graph |> Seven.topoSortWithTime 5
+    printfn "Day 7 - Part 2: Order is %A in %i seconds" (snd timed) (fst timed)
+
     Console.ReadLine() |> ignore
     0 // return an integer exit code

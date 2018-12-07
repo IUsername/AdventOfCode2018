@@ -1,46 +1,121 @@
 ﻿module Seven
 
-type StepInfo = {id:string; before:string}
+type Dependency = {depId:string; stepId:string}
+
+type Task = {depId:string; remaining:int}
+
+type Worker =
+    | Idle
+    | Working of Task
 
 let addNode (id:string) (g:Map<string,Set<string>>) =
     match Map.tryFind id g with 
     | None -> Map.add id Set.empty g
     | Some _ -> g
 
+let addDep (dep:Dependency) (g:Map<string,Set<string>>) =
+    let (depId, stepId) = (dep.depId, dep.stepId)
+    let g' = 
+        match Map.tryFind depId g with 
+        | None -> addNode depId g
+        | Some _ -> g
+    match Map.tryFind stepId g' with
+    | None -> Map.add stepId (Set.singleton depId) g'
+    | Some deps -> Map.add stepId (Set.add depId deps) g'
+
 let buildGraph s =
-    let rec buildGraph' (g:Map<string,Set<string>>) (steps:StepInfo list) =
-        match steps with
-        | h::t when (g.ContainsKey h.id) ->
-                let deps' = (g.Item h.id).Add h.before
-                let map' = g.Add (h.id, deps') |> addNode h.before
-                buildGraph' map' t
-        | h::t ->   let map' = g.Add (h.id, Set.singleton h.before) |> addNode h.before
-                    buildGraph' map' t
+    let rec buildGraph' (deps:Dependency list) (g:Map<string,Set<string>>) =        
+        match deps with
+        | h::t -> addDep h g |> buildGraph' t
         | [] -> g
-    buildGraph' Map.empty s   
+    buildGraph' s Map.empty  
 
 let nodes (g:Map<string,Set<string>>) = 
     Map.fold (fun xs k _ -> k::xs) [] g 
 
-let roots  (g:Map<string,Set<string>>) = 
-    List.filter (fun n -> not (Map.exists (fun _ v -> Set.contains n v) g)) (nodes g) |> List.sort
+let noDeps (g:Map<string,Set<string>>) =
+    let nodes = nodes g
+    let nodesSet = Set.ofList nodes
+    nodes |> List.filter (fun depId -> Map.find depId g |> Set.intersect nodesSet |> Set.isEmpty)
+
+let stepTime (ident:string) =
+    let charVal = ident.Chars 0 |> int
+    60 + charVal - (int 'A') + 1
 
 let topoSort (g:Map<string,Set<string>>) =
-    let rec dfs (g':Map<string,Set<string>>, order:string list, rts:string list) =
+    let rec topoSort' (g':Map<string,Set<string>>, order:string list, rts:string list) =
         if List.isEmpty rts then
-            order
+            order |> List.rev
         else 
-            let n = List.head rts
+            let n = List.min rts
             let order' = n::order
             let g'' = Map.remove n g'
-            let rts' = roots g''
-            dfs (g'', order', rts')
-    dfs (g, [], roots g) |> List.rev |> List.fold (+) ""
+            let rts' = noDeps g''
+            topoSort' (g'', order', rts')
+    topoSort' (g, [], noDeps g) |> List.fold (+) ""
+
+let rec performWork (g:Map<string,Set<string>>, order:string list, rts:string list, worker:Worker, inProg:Set<string>) =
+    match worker with
+    | Working t ->
+        match t.remaining with
+        | 1 -> 
+            let n = t.depId
+            let order' = n::order
+            let g' = Map.remove n g
+            let rts' = noDeps g'
+            let inProg' = Set.remove n inProg
+            (g', order', rts', Idle, inProg')
+        | r -> 
+            let t' = {t with remaining=r-1}
+            (g, order, rts, Working t', inProg)
+    | _ -> (g, order, rts, worker, inProg)
+
+let rec takeWork (g:Map<string,Set<string>>, order:string list, rts:string list, worker:Worker, inProg:Set<string>) =
+    let avail = rts |> List.filter (inProg.Contains >> not)
+    match worker with
+    | Idle when not (avail.IsEmpty) -> 
+        let n = avail |> List.min
+        let inProg' = Set.add n inProg    
+        let worker' = Working {depId=n; remaining=(stepTime n) }
+        (g, order, rts, worker', inProg')   
+    | _ -> (g, order, rts, worker, inProg)
+
+let performAllWork (g:Map<string,Set<string>>, order:string list, rts:string list, workers:Worker list, inProg:Set<string>) =
+    let rec workLoop (acc:Worker list) (g':Map<string,Set<string>>, order':string list, rts':string list, workers':Worker list, inProg':Set<string>) =
+        match workers' with
+        | h::t -> 
+            let (g'',order'',rts'',w', inProg'') = performWork (g',order',rts',h, inProg')
+            workLoop (w'::acc) (g'', order'', rts'', t, inProg'') 
+        | [] ->
+            (g',order',rts',acc |> List.rev, inProg')
+    workLoop [] (g, order, rts, workers, inProg)
+
+let takeAllWork (g:Map<string,Set<string>>, order:string list, rts:string list, workers:Worker list, inProg:Set<string>) =
+    let rec takeLoop (acc:Worker list) (g':Map<string,Set<string>>, order':string list, rts':string list, workers':Worker list, inProg':Set<string>) =
+        match workers' with
+        | h::t -> 
+            let (g'',order'',rts'',w', inProg'') = takeWork (g',order',rts',h, inProg')
+            takeLoop (w'::acc) (g'', order'', rts'', t, inProg'') 
+        | [] ->
+            (g',order',rts',acc |> List.rev, inProg')
+    takeLoop [] (g, order, rts, workers, inProg)
+    
+let allIdle = List.forall (function Idle -> true | _ -> false)  
+
+let topoSortWithTime (workers:int) (g:Map<string,Set<string>>)  =
+    let rec topoSort' (elapsed:int) state =
+        let (_, order', rts', workers', _) = state
+        if List.isEmpty rts' && workers' |> allIdle then
+            (elapsed, order' |> List.rev |> List.fold (+) "")
+        else             
+            let state' = state |> takeAllWork  |> performAllWork |> takeAllWork             
+            topoSort' (elapsed + 1) state'
+    topoSort' 0 (g, [], noDeps g, List.init workers (fun _ -> Idle), Set.empty) 
 
 let parseStep text = 
     match text with
-    | Parsing.Regex @".+\s([A-Z]{1})\s.+\s([A-Z]{1})\s.+" [ident; before] -> 
-        Some { StepInfo.id = ident; before = before }
+    | Parsing.Regex @".+\s([A-Z]{1})\s.+\s([A-Z]{1})\s.+" [depId; stepId] -> 
+        Some { Dependency.depId = depId; stepId = stepId }
     | _ -> None
 
 let dataSet' = @"
