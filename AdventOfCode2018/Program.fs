@@ -26,16 +26,16 @@ let main argv =
     let events = Four.dataSet |> Parsing.splitLines |> Four.parseEvents
     let ordered = events |> Seq.sortBy (fun e -> e.time)
     let stamped = ordered |> Four.stampWithId |> List.ofSeq
-    let mostSleep = stamped |> Four.minutesAsleepPerShiftSeq |> Four.sumShifts |> Seq.sortByDescending (fun s -> s.minutes) |> Seq.head
+    let mostSleep = stamped |> Four.minutesAsleepPerShiftSeq |> Four.sumShifts |> Seq.maxBy (fun s -> s.minutes)
     let sleepy = stamped |> Four.findMostSleepyMinuteById mostSleep.id
     printfn "Day 4 - Part 1: Most sleepy guard is #%i at minute %i multiplied to %i" sleepy.id sleepy.minute (sleepy.id * sleepy.minute)
-    let consistent = stamped |> Four.sleepyPerGuard |> List.sortByDescending (fun p -> p.freq) |> List.head
+    let consistent = stamped |> Four.sleepyPerGuard |> List.maxBy (fun p -> p.freq)
     printfn "Day 4 - Part 2: Most consistent is guard #%i at minute %i multiplied to %i" consistent.id consistent.minute (consistent.id * consistent.minute)
 
     let dataList = Five.dataSet |> Five.toCharList
     let reduced = dataList |> Five.reduce
     printfn "Day 5 - Part 1: Unit count %i" reduced.Length
-    let (char, len) = reduced |> Five.removedCharSeq |> Seq.sortBy (fun (_,len) -> len) |> Seq.head 
+    let (char, len) = reduced |> Five.maxPolymnerRemovalImpact 
     printfn "Day 5 - Part 2: Greatest impact was %A with final size of %i" char len    
 
     let pegs = Six.dataSet |> Parsing.splitLines |> Seq.map Six.parseCoord |> Six.coordToPegSeq
@@ -43,7 +43,7 @@ let main argv =
     pegs |> Seq.iter (fun p -> map.AddPeg p)
     let edgeIds = map.EdgeIds |> Set.ofSeq
     let areas = map.Areas |> Seq.filter (fun (id,_) -> not (edgeIds.Contains id))
-    let largest = areas |> Seq.map snd |> Seq.sortDescending |> Seq.head
+    let largest = areas |> Seq.map snd |> Seq.max
     printfn "Day 6 - Part 1: Largest non-infinite size is %i" largest
 
     let nearArea = map.Distances 10000 |> Seq.length

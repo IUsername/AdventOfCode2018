@@ -15,11 +15,11 @@ type Scrap = {id: int; position:Position; size:Size} with
 type Grid(N: int, M: int) =
     let array = Array2D.zeroCreate<int> N M
 
-    member __.Increment(x: int, y: int) (amount:int) = 
-        array.[x,y] <- array.[x,y] + amount        
+    member __.Increment(x: int, y: int) = 
+        array.[x,y] <- array.[x,y] + 1       
 
     member this.AddScrap(s: Scrap) =
-        s.AreaCoords |> Seq.iter (fun c -> this.Increment c 1) 
+        s.AreaCoords |> Seq.iter (fun c -> this.Increment c) 
 
     member __.Count f =
         array |> Seq.cast<int> |> Seq.filter (fun s -> f s) |> Seq.length

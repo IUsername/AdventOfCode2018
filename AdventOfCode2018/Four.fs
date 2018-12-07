@@ -89,16 +89,9 @@ let toMinuteAsleepSeq (events:StampedGuardEvent list) =
     events |> minuteAsleepPerShift None
 
 let findMostSleepyMinuteById ident (events:StampedGuardEvent list) =
-    let mostSleepyMinute (minutes:seq<int>) = 
-        minutes 
-        |> Seq.countBy id 
-        |> Seq.sortByDescending snd 
-        |> Seq.tryHead          
-    let filterEventsById id (events:StampedGuardEvent list) = 
-        events 
-        |> List.filter (fun s -> s.id = id)
+    let mostSleepyMinute = Seq.countBy id >> Seq.sortByDescending snd >> Seq.tryHead          
     let r = events
-            |> filterEventsById ident  
+            |> List.filter (fun s -> s.id = ident)
             |> toMinuteAsleepSeq 
             |> mostSleepyMinute
     let (minute,freq) = defaultArg r (0,0)
