@@ -12,19 +12,28 @@ let main argv =
         |> Seq.takeWhile ((<>) null) 
         |> Seq.takeWhile ((<>) "exit")
 
-    let selectDay = fun d ->
+    let duration f d = 
+        let timer = new Diagnostics.Stopwatch()
+        timer.Start()
+        let r = f(d)
+        (r, timer.Elapsed)
+
+    let selectDay d = 
         match d with
-           | "1" -> One.dataSet |> One.execute
-           | "2" -> Two.dataSet |> Two.execute
-           | "3" -> Three.dataSet |> Three.execute
-           | "4" -> Four.dataSet |> Four.execute
-           | "5" -> Five.dataSet |> Five.execute
-           | "6" -> Six.dataSet |> Six.execute
-           | "7" -> Seven.dataSet |> Seven.execute
-           | _ -> Console.WriteLine "Unknown"
+           | "1" -> One.dataSet |> One.execute; true
+           | "2" -> Two.dataSet |> Two.execute; true
+           | "3" -> Three.dataSet |> Three.execute; true
+           | "4" -> Four.dataSet |> Four.execute; true
+           | "5" -> Five.dataSet |> Five.execute; true
+           | "6" -> Six.dataSet |> Six.execute; true
+           | "7" -> Seven.dataSet |> Seven.execute; true
+           | _ -> false
+
+    let success = fun (s:bool,t:TimeSpan) -> 
+        if s then printfn "Done in %ims" t.Milliseconds else Console.WriteLine "Error"
 
     Console.WriteLine "Enter day number:" 
-    inputs |> Seq.iter selectDay
+    inputs |> Seq.map (duration selectDay) |> Seq.iter success
     0 // return an integer exit code
 
 
