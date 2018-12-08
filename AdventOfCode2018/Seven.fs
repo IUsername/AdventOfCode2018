@@ -2,18 +2,20 @@
 
 type Dependency = {depId:string; stepId:string}
 
-type Task = {depId:string; remaining:int}
+type Graph = Map<string,Set<string>>
 
-type Worker =
+type private Task = {depId:string; remaining:int}
+
+type private Worker =
     | Idle
     | Working of Task
 
-let addNode (id:string) (g:Map<string,Set<string>>) =
+let private addNode (id:string) (g:Graph) =
     match Map.tryFind id g with 
     | None -> Map.add id Set.empty g
     | Some _ -> g
 
-let addDep (dep:Dependency) (g:Map<string,Set<string>>) =
+let private addDep (dep:Dependency) (g:Graph) =
     let (depId, stepId) = (dep.depId, dep.stepId)
     let g' = 
         match Map.tryFind depId g with 
@@ -23,102 +25,115 @@ let addDep (dep:Dependency) (g:Map<string,Set<string>>) =
     | None -> Map.add stepId (Set.singleton depId) g'
     | Some deps -> Map.add stepId (Set.add depId deps) g'
 
-let buildGraph s =
-    let rec buildGraph' (deps:Dependency list) (g:Map<string,Set<string>>) =        
+let private buildGraph (s:Dependency list) =
+    let rec buildGraph' (deps:Dependency list) (g:Graph) =        
         match deps with
         | h::t -> addDep h g |> buildGraph' t
         | [] -> g
     buildGraph' s Map.empty  
 
-let nodes (g:Map<string,Set<string>>) = 
+let private nodes (g:Graph) = 
     Map.fold (fun xs k _ -> k::xs) [] g 
 
-let noDeps (g:Map<string,Set<string>>) =
+let private noDeps (g:Graph) =
     let nodes = nodes g
     let nodesSet = Set.ofList nodes
     nodes |> List.filter (fun depId -> Map.find depId g |> Set.intersect nodesSet |> Set.isEmpty)
 
-let stepTime (ident:string) =
+let private stepTime (ident:string) =
     let charVal = ident.Chars 0 |> int
     60 + charVal - (int 'A') + 1
 
-let topoSort (g:Map<string,Set<string>>) =
-    let rec topoSort' (g':Map<string,Set<string>>, order:string list, rts:string list) =
+let private topoSort (g:Graph) =
+    let rec topoSort' (g':Graph, completed:string list, rts:string list) =
         if List.isEmpty rts then
-            order |> List.rev
+            completed |> List.rev
         else 
             let n = List.min rts
-            let order' = n::order
+            let completed' = n::completed
             let g'' = Map.remove n g'
             let rts' = noDeps g''
-            topoSort' (g'', order', rts')
+            topoSort' (g'', completed', rts')
     topoSort' (g, [], noDeps g) |> List.fold (+) ""
 
-let rec performWork (g:Map<string,Set<string>>, order:string list, rts:string list, worker:Worker, inProg:Set<string>) =
+let rec private performWork (g:Graph, completed:string list, rts:string list, worker:Worker, inProg:Set<string>) =
     match worker with
     | Working t ->
         match t.remaining with
         | 1 -> 
             let n = t.depId
-            let order' = n::order
+            let completed' = n::completed
             let g' = Map.remove n g
             let rts' = noDeps g'
             let inProg' = Set.remove n inProg
-            (g', order', rts', Idle, inProg')
+            (g', completed', rts', Idle, inProg')
         | r -> 
             let t' = {t with remaining=r-1}
-            (g, order, rts, Working t', inProg)
-    | _ -> (g, order, rts, worker, inProg)
+            (g, completed, rts, Working t', inProg)
+    | _ -> (g, completed, rts, worker, inProg)
 
-let rec takeWork (g:Map<string,Set<string>>, order:string list, rts:string list, worker:Worker, inProg:Set<string>) =
+let rec private takeWork (g:Graph, completed:string list, rts:string list, worker:Worker, inProg:Set<string>) =
     let avail = rts |> List.filter (inProg.Contains >> not)
     match worker with
     | Idle when not (avail.IsEmpty) -> 
         let n = avail |> List.min
         let inProg' = Set.add n inProg    
         let worker' = Working {depId=n; remaining=(stepTime n) }
-        (g, order, rts, worker', inProg')   
-    | _ -> (g, order, rts, worker, inProg)
+        (g, completed, rts, worker', inProg')   
+    | _ -> (g, completed, rts, worker, inProg)
 
-let performAllWork (g:Map<string,Set<string>>, order:string list, rts:string list, workers:Worker list, inProg:Set<string>) =
-    let rec workLoop (acc:Worker list) (g':Map<string,Set<string>>, order':string list, rts':string list, workers':Worker list, inProg':Set<string>) =
+let private performAllWork (g:Graph, completed:string list, rts:string list, workers:Worker list, inProg:Set<string>) =
+    let rec workLoop (acc:Worker list) (g':Graph, completed':string list, rts':string list, workers':Worker list, inProg':Set<string>) =
         match workers' with
         | h::t -> 
-            let (g'',order'',rts'',w', inProg'') = performWork (g',order',rts',h, inProg')
-            workLoop (w'::acc) (g'', order'', rts'', t, inProg'') 
+            let (g'',completed'',rts'',ws,inProg'') = performWork (g',completed',rts',h,inProg')
+            workLoop (ws::acc) (g'',completed'', rts'',t,inProg'') 
         | [] ->
-            (g',order',rts',acc |> List.rev, inProg')
-    workLoop [] (g, order, rts, workers, inProg)
+            (g',completed',rts',acc |> List.rev, inProg')
+    workLoop [] (g, completed, rts, workers, inProg)
 
-let takeAllWork (g:Map<string,Set<string>>, order:string list, rts:string list, workers:Worker list, inProg:Set<string>) =
-    let rec takeLoop (acc:Worker list) (g':Map<string,Set<string>>, order':string list, rts':string list, workers':Worker list, inProg':Set<string>) =
+let private takeAllWork (g:Graph, completed:string list, rts:string list, workers:Worker list, inProg:Set<string>) =
+    let rec takeLoop (acc:Worker list) (g':Graph, completed':string list, rts':string list, workers':Worker list, inProg':Set<string>) =
         match workers' with
         | h::t -> 
-            let (g'',order'',rts'',w', inProg'') = takeWork (g',order',rts',h, inProg')
-            takeLoop (w'::acc) (g'', order'', rts'', t, inProg'') 
+            let (g'',completed'',rts'',ws,inProg'') = takeWork (g',completed',rts',h,inProg')
+            takeLoop (ws::acc) (g'',completed'',rts'',t,inProg'') 
         | [] ->
-            (g',order',rts',acc |> List.rev, inProg')
-    takeLoop [] (g, order, rts, workers, inProg)
+            (g',completed',rts',acc |> List.rev,inProg')
+    takeLoop [] (g, completed, rts, workers, inProg)
     
-let allIdle = List.forall (function Idle -> true | _ -> false)  
+let private allIdle = List.forall (function Idle -> true | _ -> false)  
 
-let topoSortWithTime (workers:int) (g:Map<string,Set<string>>)  =
+let private topoSortWithTime (workers:int) (g:Graph)  =
     let rec topoSort' (elapsed:int) state =
-        let (_, order', rts', workers', _) = state
-        if List.isEmpty rts' && workers' |> allIdle then
-            (elapsed, order' |> List.rev |> List.fold (+) "")
-        else             
+        let (_, completed, rts, workers, _) = state
+        if List.isEmpty rts && workers |> allIdle then
+            (elapsed, completed |> List.rev |> List.fold (+) "")
+        else      
+            // Completing work may free up additional work for preceeding idle workers so perform double take pass
             let state' = state |> takeAllWork  |> performAllWork |> takeAllWork             
             topoSort' (elapsed + 1) state'
     topoSort' 0 (g, [], noDeps g, List.init workers (fun _ -> Idle), Set.empty) 
 
-let parseStep text = 
+let private parseStep text = 
     match text with
     | Parsing.Regex @".+\s([A-Z]{1})\s.+\s([A-Z]{1})\s.+" [depId; stepId] -> 
         Some { Dependency.depId = depId; stepId = stepId }
     | _ -> None
 
-let dataSet' = @"
+let linesToDepList (l:seq<string>) = l |> Seq.map parseStep |> Seq.choose id |> Seq.toList   
+
+let execute = fun d ->
+    let steps = d |> Parsing.splitLines |> linesToDepList
+    let graph = steps |> buildGraph 
+    let sorted = graph |> topoSort
+    printfn "Day 7 - Part 1: Order is %A" sorted
+    
+    let timed = graph |> topoSortWithTime 5   
+    printfn "Day 7 - Part 2: Order is %A in %i seconds" (snd timed) (fst timed)    
+    
+
+let testSet = @"
 Step F must be finished before step E can begin.
 Step C must be finished before step A can begin.
 Step B must be finished before step E can begin.

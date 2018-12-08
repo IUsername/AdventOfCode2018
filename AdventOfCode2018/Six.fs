@@ -78,6 +78,17 @@ let parseCoord text =
 let coordToPegSeq c =
     c |> Seq.choose id |> Seq.mapi (fun i el -> {id=i; coord=el})
 
+let execute = fun d ->
+    let pegs = d |> Parsing.splitLines |> Seq.map parseCoord |> coordToPegSeq
+    let map = Locations (400,400)
+    pegs |> Seq.iter (fun p -> map.AddPeg p)
+    let edgeIds = map.EdgeIds |> Set.ofSeq
+    let areas = map.Areas |> Seq.filter (fun (id,_) -> not (edgeIds.Contains id))
+    let largest = areas |> Seq.map snd |> Seq.max
+    printfn "Day 6 - Part 1: Largest non-infinite size is %i" largest
+    let nearArea = map.Distances 10000 |> Seq.length
+    printfn "Day 6 - Part 2: Largest centralized size is %i" nearArea
+
 let dataSet = @"
 177, 51
 350, 132

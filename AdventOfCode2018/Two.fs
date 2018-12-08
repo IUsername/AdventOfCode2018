@@ -54,6 +54,11 @@ let commonChars (ids:string list) =
     let _, a, b = findMinDiff ids (num.MaxValue, "", "")
     matchingChars a b |> implode
 
+let execute = fun d ->    
+    let ids = d |> Parsing.splitLines
+    printfn "Day 2 - Part 1: Sum Check %i" (countAccumulator ids)
+    printfn "Day 2 - Part 2: Common %A" (commonChars (List.ofSeq ids))
+
 let dataSet = @"
 ymdrcyapvwfloiuktanxzjsieb
 ymdrwhgznwfloiuktanxzjsqeb

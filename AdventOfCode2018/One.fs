@@ -22,7 +22,12 @@ let rec firstAccInSet acc (set:Set<int>) (e:IEnumerator<int>) =
 
 let firstRepeatFreq values = 
     let numSeq = values |> repeat
-    firstAccInSet 0 Set.empty (numSeq.GetEnumerator())        
+    firstAccInSet 0 Set.empty (numSeq.GetEnumerator())      
+
+let execute = fun d -> 
+    let values = d |> Parsing.splitLines |> textLinesSeqToInt  
+    printfn "Day 1 - Part 1: %i (should be 536)" (Seq.sum values)
+    printfn "Day 1 - Part 2: First repeat frequency is %i" (firstRepeatFreq values)
 
 let dataSet = @"
 +19

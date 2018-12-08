@@ -101,6 +101,16 @@ let sleepyPerGuard (events:StampedGuardEvent list) =
     let ids = events |> List.map (fun e -> e.id) |> List.distinct
     ids |> List.map (fun i -> findMostSleepyMinuteById i events)    
 
+let execute = fun d ->
+    let events = d |> Parsing.splitLines |> parseEvents
+    let ordered = events |> Seq.sortBy (fun e -> e.time)
+    let stamped = ordered |> stampWithId |> List.ofSeq
+    let mostSleep = stamped |> minutesAsleepPerShiftSeq |> sumShifts |> Seq.maxBy (fun s -> s.minutes)
+    let sleepy = stamped |> findMostSleepyMinuteById mostSleep.id
+    printfn "Day 4 - Part 1: Most sleepy guard is #%i at minute %i multiplied to %i" sleepy.id sleepy.minute (sleepy.id * sleepy.minute)
+    let consistent = stamped |> sleepyPerGuard |> List.maxBy (fun p -> p.freq)
+    printfn "Day 4 - Part 2: Most consistent is guard #%i at minute %i multiplied to %i" consistent.id consistent.minute (consistent.id * consistent.minute)
+
 let dataSet = @"
 [1518-10-14 00:05] falls asleep
 [1518-09-13 00:12] falls asleep

@@ -47,6 +47,14 @@ let notOverlapped (grid:Grid) (scrap:Scrap) =
 let notOverlappedId (grid:Grid) (scraps:seq<Scrap>) = 
     scraps |> Seq.find (notOverlapped grid) 
 
+let execute = fun d ->
+    let lines = d |> Parsing.splitLines
+    let scraps = parseTextSeq lines
+    let grid = Grid (2000,2000)    
+    populateGrid grid scraps
+    printfn "Day 3 - Part 1: Overlapped scrap squares %A" (grid.Count (fun i -> i > 1))
+    printfn "Day 3 - Part 2: Non-overlapped scrap ID %i" (notOverlappedId grid scraps).id
+
 let dataSet = @"
 #1 @ 393,863: 11x29
 #2 @ 675,133: 15x26
