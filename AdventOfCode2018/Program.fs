@@ -10,7 +10,7 @@ let main argv =
     let inputs = 
         Seq.initInfinite (fun _ -> Console.ReadLine()) 
         |> Seq.takeWhile ((<>) null) 
-        |> Seq.takeWhile ((<>) "exit")
+        |> Seq.takeWhile ((<>) "")
 
     let duration f d = 
         let timer = new Diagnostics.Stopwatch()
@@ -28,6 +28,7 @@ let main argv =
            | "5" -> Five.dataSet |> Five.execute; true
            | "6" -> Six.dataSet |> Six.execute; true
            | "7" -> Seven.dataSet |> Seven.execute; true
+           | "8" -> Eight.dataSet |> Eight.execute; true
            | _ -> false
 
     let success = fun (s:bool,t:TimeSpan) -> 
