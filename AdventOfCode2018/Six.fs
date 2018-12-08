@@ -71,7 +71,7 @@ type Locations (N: int, M:int) =
 
 let parseCoord text = 
     match text with
-    | Parsing.Regex @"(\d+),\s(\d+)\b" [x;y] -> 
+    | Parsing.RegexMany @"\d+" [x;y] -> 
         Some {Coord.x = int x; y = int y}
     | _ -> None
 
@@ -80,7 +80,9 @@ let coordToPegSeq c =
 
 let execute = fun d ->
     let pegs = d |> Parsing.splitLines |> Seq.map parseCoord |> coordToPegSeq
-    let map = Locations (400,400)
+    let maxX = pegs |> Seq.map (fun p -> p.coord.x) |> Seq.max 
+    let maxY = pegs |> Seq.map (fun p -> p.coord.y) |> Seq.max
+    let map = Locations (maxX,maxY)
     pegs |> Seq.iter (fun p -> map.AddPeg p)
     let edgeIds = map.EdgeIds |> Set.ofSeq
     let areas = map.Areas |> Seq.filter (fun (id,_) -> not (edgeIds.Contains id))

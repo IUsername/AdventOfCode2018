@@ -29,7 +29,7 @@ type Grid(N: int, M: int) =
 
 let parseScrap text = 
     match text with
-    | Parsing.Regex @"#(\d+)\D+(\d+)\D+(\d+)\D+(\d+)\D+(\d+)" [id; x; y; w; h] -> 
+    | Parsing.RegexMany @"\d+" [id; x; y; w; h] -> 
         Some { Scrap.id = int id; 
                 position = {x = int x; y = int y}; 
                 size = {width = int w; height = int h} }

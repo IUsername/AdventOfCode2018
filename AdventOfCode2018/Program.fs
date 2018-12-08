@@ -16,6 +16,7 @@ let main argv =
         let timer = new Diagnostics.Stopwatch()
         timer.Start()
         let r = f(d)
+        timer.Stop()
         (r, timer.Elapsed)
 
     let selectDay d = 
