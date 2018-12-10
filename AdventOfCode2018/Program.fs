@@ -16,7 +16,6 @@ let main argv =
         let timer = new Diagnostics.Stopwatch()
         timer.Start()
         let r = f(d)
-        timer.Stop()
         (r, timer.Elapsed)
 
     let selectDay d = 
@@ -33,7 +32,7 @@ let main argv =
            | _ -> false
 
     let success = fun (s:bool,t:TimeSpan) -> 
-        if s then printfn "Done in %ims" t.Milliseconds else Console.WriteLine "Error"
+        if s then printfn "Done in %ims" (int t.TotalMilliseconds) else Console.WriteLine "Error"
 
     Console.WriteLine "Enter day number:" 
     inputs |> Seq.map (duration selectDay) |> Seq.iter success
