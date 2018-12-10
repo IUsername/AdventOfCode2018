@@ -3,14 +3,12 @@
 type Vel = {vx:int; vy:int}
 
 type Coord = {x:int; y:int} with    
-    member this.ApplyDelta (v:Vel) (mag:int) = 
-        {x = this.x + (v.vx * mag); y = this.y + (v.vy * mag) } 
-    member this.DistanceTo (other:Coord) = 
-        abs (this.x - other.x) + abs (this.y - other.y)
+    member this.Shift (v:Vel) (dt:int) = 
+        {x = this.x + (v.vx * dt); y = this.y + (v.vy * dt) } 
 
 type LightInfo = {c:Coord; v:Vel} with
-    member this.Step (mag:int) = 
-        let c' = this.c.ApplyDelta this.v mag
+    member this.Step (dt:int) = 
+        let c' = this.c.Shift this.v dt
         {c = c'; v = this.v}
 
 type Point = 
@@ -29,8 +27,8 @@ type Locations (minX:int, maxX:int, minY:int, maxY:int) =
             for x in [0..(Array2D.length1 internalArray) - 1] do
             let cur = internalArray.[x,y]
             match cur with
-            | Empty   -> yield "."
-            | Light _ -> yield "#"
+            | Empty   -> yield " "
+            | Light _ -> yield "█"
         } |> String.concat ""
 
     member this.ToTextLines =        
@@ -39,25 +37,25 @@ type Locations (minX:int, maxX:int, minY:int, maxY:int) =
                 yield this.RowToLine y
         }
 
-let AreaSize (minX:int, maxX:int, minY:int, maxY:int) = 
+let private AreaSize (minX:int, maxX:int, minY:int, maxY:int) = 
     let w = int64 (abs (maxX - minX))
     let h = int64 (abs (maxY - minY))
     w * h
 
-let FindMinMax (c:seq<Coord>) =
+let private FindMinMax (c:seq<Coord>) =
     let xMin = c |> Seq.minBy (fun i -> i.x)
     let xMax = c |> Seq.maxBy (fun i -> i.x)
     let yMin = c |> Seq.minBy (fun i -> i.y)
     let yMax = c |> Seq.maxBy (fun i -> i.y)
     (xMin.x, xMax.x, yMin.y, yMax.y)
 
-let findArea (l:seq<LightInfo>) = 
+let private findArea (l:seq<LightInfo>) = 
     l |> Seq.map (fun l -> l.c) |> FindMinMax |> AreaSize
 
-let StepAndUpdate (m:int) (li:seq<LightInfo>) = 
-    li |> Seq.map (fun li -> li.Step m)
+let private fastForward (time:int) (li:seq<LightInfo>) = 
+    li |> Seq.map (fun l -> l.Step time)
         
-let parseLine line = 
+let private parseLine line = 
     match line with
     | Parsing.RegexMany @"-?[\d]+" [x;y;vx;vy] -> 
         let coord = {x = int x; y = int y}
@@ -65,33 +63,31 @@ let parseLine line =
         Some {LightInfo.c = coord; v = vel}
     | _ -> None
 
-let printMatrix (li:seq<LightInfo>) (time:int) = 
-    let li' = StepAndUpdate time li
+let private printMatrix (li:seq<LightInfo>) (time:int) = 
+    printfn "Step %i" time
+    let li' = li |> fastForward time
     let minMax = li' |> Seq.map (fun l -> l.c) |> FindMinMax
     let locs = Locations minMax
-    li' |> Seq.iter (fun l -> locs.[l.c] <- Light l)
-    printfn "Step %i" time
-    locs.ToTextLines |> Seq.iter (fun t -> printfn "%A" t)
+    li' |> Seq.iter (fun l -> locs.[l.c] <- Light l)    
+    locs.ToTextLines |> Seq.iter (fun t -> printfn " %s" t)
+
+let rec private moveUntilLarger offset delta size (li:seq<LightInfo>) = 
+    let t = offset + delta
+    let size' = li |> fastForward t |> findArea
+    match size' > size with 
+    | false -> moveUntilLarger t delta size' li
+    | true -> (t, size')
+
+let rec private loop time delta size (li:seq<LightInfo>) =
+    let u, size' = moveUntilLarger time delta size li
+    let l, size' = moveUntilLarger u (-delta) size' li   
+    match delta with
+    | 1 -> [l..u] |> Seq.minBy (fun t -> li |> fastForward t |> findArea) 
+    | _ -> loop l (delta >>> 1) size' li
 
 let execute = fun d ->
     let lights = d |> Parsing.splitLines |> Seq.map parseLine |> Seq.choose id 
     let initSize = lights |> findArea
-
-    let rec moveUntilLarger offset delta size (li:seq<LightInfo>) = 
-        let el = offset + delta
-        let li' = StepAndUpdate el li
-        let size' = li' |> findArea
-        match size' > size with 
-        | false -> moveUntilLarger el delta size' li
-        | true -> (el, size')
-
-    let rec loop time delta size (li:seq<LightInfo>) =
-        let u, size' = moveUntilLarger time delta size li
-        let l, size' = moveUntilLarger u (-delta) size' li   
-        match delta with
-        | 1 -> [l..u] |> Seq.minBy (fun i -> StepAndUpdate i li |> findArea) 
-        | _ -> loop l (delta >>> 1) size' li
-
     let time = loop 0 1024 initSize lights   
     printfn "Day 10 - part 1 & 2:"
     printMatrix lights time
