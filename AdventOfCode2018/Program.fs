@@ -29,6 +29,7 @@ let main argv =
            | "7" -> Seven.dataSet |> Seven.execute; true
            | "8" -> Eight.dataSet |> Eight.execute; true
            | "9" -> Nine.dataSet |> Nine.execute; true
+           | "10" -> Ten.dataSet |> Ten.execute; true
            | _ -> false
 
     let success = fun (s:bool,t:TimeSpan) -> 
