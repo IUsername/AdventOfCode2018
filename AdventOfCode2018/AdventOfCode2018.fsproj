@@ -58,6 +58,7 @@
     <Compile Include="Eight.fs" />
     <Compile Include="Nine.fs" />
     <Compile Include="Ten.fs" />
+    <Compile Include="Eleven.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
     <Content Include="packages.config" />
