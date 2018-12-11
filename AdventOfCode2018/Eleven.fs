@@ -37,15 +37,16 @@ type Grid (N:int, M:int, sn:int) =
     let rec loop (g:Grid) (s:int, c:Coord) =
         match s with
         | 0 -> 0
-        | n when n < 9 -> g.BlockLevel n c
+        | 1 -> g.[c].pl
+        | n when n < 21 -> g.BlockLevel s c
         | _ -> (s,c) |>
-                memoize (fun (s':int, c':Coord) ->
-                    let s'' = s' / 2    
-                    let offset = g.GetOffsets s'' c'               
+                memoize (fun (s':int, c':Coord) -> 
+                    let s'' = s'/2
+                    let inner = g.GetOffsets s'' c' |> Seq.map (fun b -> loop g (s'', b) ) |> Seq.sum
                     let edges = g.GetRBEdges s' c'
-                    offset |> Seq.map (fun e -> loop g (s'',e)) 
-                    |> Seq.append (edges |> Seq.map (fun e -> g.BlockLevel 1 e )) 
-                    |> Seq.sum ) 
+                    let eSum = edges |> Seq.map (fun e -> g.[e].pl ) |> Seq.sum
+                    eSum + inner
+                    )
 
     member __.Item
         with get (c:Coord) = internalArray.[c.x - 1,c.y - 1]
@@ -62,7 +63,15 @@ type Grid (N:int, M:int, sn:int) =
         this.LoopBlock size c |> Seq.sumBy (fun b -> b.pl)
 
     member this.MemBlockLevel (s:int) (c:Coord) =         
-       loop this (s,c)   
+       loop this (s,c)  
+       
+    member __.BlocksSeq (size:int) = 
+        seq {
+            for y in [0..(Array2D.length2 internalArray) - size] do
+                for x in [0..(Array2D.length1 internalArray) - size] do
+                    let fc = internalArray.[x,y]
+                    yield fc.c
+        }
 
     member this.Blocks (size:int) = 
         seq {
@@ -103,14 +112,14 @@ type Grid (N:int, M:int, sn:int) =
         }     
 
 let sizeToMax (g:Grid) (s:int) =
-    g.Blocks s |> Seq.maxBy (fun (_,pl) -> pl)
+    g.BlocksSeq s |> PSeq.map (fun c -> (c, g.MemBlockLevel s c)) |> PSeq.maxBy (fun (_,pl) -> pl)
 
 let execute = fun d ->
     let g = Grid (300,300,d)
     let (c,_) = 3 |> sizeToMax g
     printfn "Day 11 - part 1: Largest power coordingate is %i,%i" (c.x) (c.y)
 
-    let (s,(c,_)) = [1..20] |> List.map (fun s -> (s, s |> sizeToMax g)) |> List.maxBy (fun (_,(_,p)) -> p)
+    let (s,(c,_)) = [1..300] |> List.map (fun s -> (s, s |> sizeToMax g)) |> List.maxBy (fun (_,(_,p)) -> p)
     printfn "Day 11 - part 2: Largest power coordingate is %i,%i,%i" (c.x) (c.y) s
 
 
