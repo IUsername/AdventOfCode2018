@@ -10,42 +10,34 @@ module Seq =
 
 type Rules = Map<int,bool>
          
-let bitSeqToInt (bs:seq<bool>) =    
+let private bitSeqToInt (bs:seq<bool>) =    
     bs
     |> Seq.mapi (fun i b -> if b then 1 <<< i else 0) 
     |> Seq.fold (fun p b -> p ||| b) 0  
     
-let bitSeqToInt64 (bs:seq<bool>) =    
+let private bitSeqToInt64 (bs:seq<bool>) =    
     bs
     |> Seq.mapi (fun i b -> if b then 1L <<< i else 0L) 
     |> Seq.fold (fun p b -> p ||| b) 0L  
 
-let getBit (m:int) (ba:BitArray) (i:int) =
-    match i with
-    | _ when i < 0 -> false
-    | _ when i > m -> false
-    | _ -> ba.[i]   
+let private getBit (max:int) (ba:BitArray) (index:int) =
+    match index with
+    | _ when index < 0 -> false
+    | _ when index > max -> false
+    | _ -> ba.[index]   
     
-let surround (w:int) (bI:int) (max:int) (ba:BitArray) =
-    seq {
-        for s=(-w) to w do
-           let i = bI + s
-           let b = getBit max ba i
-           yield b
-        }
+let private surround (width:int) (index:int) (max:int) (ba:BitArray) =
+    [(index-width)..(index+width)] |> Seq.map (getBit max ba)
 
-let eval (w:int) (r:Rules) (sI:int, ba:BitArray) =
+let private step (width:int) (r:Rules) (startIndex:int, ba:BitArray) =
     seq {
         let maxIndex = ba.Length - 1
-        for bit=0-w to maxIndex+w do
-            let iVal = surround w bit maxIndex ba |> bitSeqToInt
-            let p = r.TryFind iVal
-            match p with
-            | Some v -> yield (bit+sI,v)
-            | None -> yield (bit+sI, false)
+        for index=0-width to maxIndex+width do
+            let iVal = surround width index maxIndex ba |> bitSeqToInt
+            yield (index+startIndex,r.Item iVal)
         }
         
-let toGen (p:seq<int*bool>) =
+let private toGen (p:seq<int*bool>) =
     let trimmed = p |> Seq.skipWhile (snd >> not)
     let startIndex = trimmed |> Seq.head |> fst
     let lastIndex = trimmed |> Seq.findIndexBack (snd)
@@ -60,8 +52,7 @@ let private charToBit (c:Char) =
     | _ -> false
 
 let private strToBitArray (str:string) =
-    let bits = str.ToCharArray() |> Array.map charToBit
-    BitArray(bits)
+    BitArray(str.ToCharArray() |> Array.map charToBit)
 
 let private strToBit (str:string) =
     str.Chars 0 |> charToBit
@@ -76,8 +67,6 @@ let private potCount (startIndex:int64, ba:BitArray) =
             count <- count + startIndex + int64 bit
     count
     
-let private rulesToMap(r:seq<(int*bool)>) = Map<int,bool>(r)
-
 let private parseState line =
     match line with
     | Parsing.Regex @"initial state: ([.#]+)" [s] ->
@@ -92,20 +81,20 @@ let private parseRule line =
 
 let private runSim (rules:Rules) (init:BitArray) (maxGen:int64) = 
     let mutable result = (0,init)
-    let mutable priorHash = 0L
+    let mutable priorHash = init |> Seq.ofBitArray |> bitSeqToInt64
     let mutable continueLooping = true
     let mutable stopForHashCheck = false
     let mutable gen = 1L
     while continueLooping do
         if gen = maxGen then
             continueLooping <- false
-        let (s,ba,h) = eval 2 rules result |> toGen        
-        if h = priorHash then
+        let (s,ba,hash) = step 2 rules result |> toGen        
+        if hash = priorHash then
             continueLooping <- false
             stopForHashCheck <- true
         gen <- gen + 1L      
         result <- (s,ba)  
-        priorHash <- h
+        priorHash <- hash
     
     let (sI,ba) = result
     
@@ -120,7 +109,7 @@ let private runSim (rules:Rules) (init:BitArray) (maxGen:int64) =
 let execute = fun d ->
     let lines = d |> Parsing.splitLines 
     let initLine = lines |> Seq.choose parseState |> Seq.head
-    let rules = lines |> Seq.skip 1 |> Seq.choose parseRule |> rulesToMap    
+    let rules = Rules(lines |> Seq.skip 1 |> Seq.choose parseRule) 
 
     printfn "Day 12 - part 1: Pot sum %i" (runSim rules initLine 20L)
     printfn "Day 12 - part 2: Pot sum %i" (runSim rules initLine 50000000000L)
