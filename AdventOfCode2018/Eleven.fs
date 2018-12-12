@@ -8,6 +8,8 @@ let hundreds (value:int) =
 type Coord = {x:int; y:int} with
     member this.Offset (dx:int, dy:int) =
         {x=this.x+dx; y=this.y+dy}
+    member this.Shift = {x=this.x-1; y=this.y-1}
+    member this.ToTuple = (this.x,this.y)
 
 let powerLevel (c:Coord) (sn:int) = 
     let rackId = c.x + 10
@@ -19,107 +21,67 @@ let toFuelCell (sn:int) = fun i j ->
     let c = {Coord.x=i+1; y=j+1}
     {FuelCell.c=c; pl=(powerLevel c sn)}
 
+type Grid (N:int, sn:int) = 
+    let internalArray = Array2D.init N N (toFuelCell sn) 
 
-
-type Grid (N:int, M:int, sn:int) = 
-    let internalArray = Array2D.init N M (toFuelCell sn) 
-    let cache = ref Map.empty
-
-    let memoize f =        
-        fun x ->
-            match (!cache).TryFind(x) with
-            | Some res -> res
-            | None ->
-                let res = f x
-                cache := (!cache).Add(x,res)
-                res
-
-    let rec loop (g:Grid) (s:int, c:Coord) =
-        match s with
-        | 0 -> 0
-        | 1 -> g.[c].pl
-        | n when n < 21 -> g.BlockLevel s c
-        | _ -> (s,c) |>
-                memoize (fun (s':int, c':Coord) -> 
-                    let s'' = s'/2
-                    let inner = g.GetOffsets s'' c' |> Seq.map (fun b -> loop g (s'', b) ) |> Seq.sum
-                    let edges = g.GetRBEdges s' c'
-                    let eSum = edges |> Seq.map (fun e -> g.[e].pl ) |> Seq.sum
-                    eSum + inner
-                    )
+    // Summed-area table
+    let sat = Array2D.create N N 0
 
     member __.Item
         with get (c:Coord) = internalArray.[c.x - 1,c.y - 1]
         and  set (c:Coord) (value: FuelCell) = internalArray.[c.x - 1,c.y - 1] <- value
 
-    member this.LoopBlock (size:int) (c:Coord) = 
-        seq {
-            for y in [c.y..c.y+size-1] do
-                for x in [c.x..c.x+size-1] do
-                    yield this.[{x=x;y=y}]
-        }
-    
-    member this.BlockLevel (size:int) (c:Coord) =
-        this.LoopBlock size c |> Seq.sumBy (fun b -> b.pl)
+    member private __.xySAT (x:int, y:int) =
+        if x < 0 || y < 0 then 0 else sat.[x,y]
 
-    member this.MemBlockLevel (s:int) (c:Coord) =         
-       loop this (s,c)  
-       
-    member __.BlocksSeq (size:int) = 
+    member private __.GetSAT (c:Coord) =
+        let (x,y) = c.Shift.ToTuple
+        if x < 0 || y < 0 then 0 else sat.[x,y]
+
+    member this.BuildSAT =         
+        for y in [0..N-1] do
+            for x in [0..N-1] do                  
+                let i = this.xySAT (x-1,y-1)
+                let j = this.xySAT (x,y-1)
+                let k = this.xySAT (x-1,y)
+                let fc = internalArray.[x,y].pl                   
+                sat.[x,y] <- fc + j + k - i    
+                
+    member private this.AreaSum (size:int) (coord:Coord) =   
+        let delta = size-1
+        let a = this.GetSAT (coord.Offset(-1,-1))
+        let b = this.GetSAT (coord.Offset(delta, -1))
+        let c = this.GetSAT (coord.Offset(-1, delta))
+        let d = this.GetSAT (coord.Offset(delta,delta))
+        (d + a - b - c)
+
+    member __.AllCells (size:int) = 
         seq {
-            for y in [0..(Array2D.length2 internalArray) - size] do
-                for x in [0..(Array2D.length1 internalArray) - size] do
-                    let fc = internalArray.[x,y]
-                    yield fc.c
+            for y in [0..N-size] do
+                for x in [0..N-size] do
+                    yield internalArray.[x,y]
         }
 
     member this.Blocks (size:int) = 
-        seq {
-            for y in [0..(Array2D.length2 internalArray) - size] do
-                for x in [0..(Array2D.length1 internalArray) - size] do
-                    let fc = internalArray.[x,y]
-                    yield (fc.c, this.MemBlockLevel size fc.c)
-        }
-
-    member __.RowToLine (y:int) =         
-        seq {
-            for x in [0..(Array2D.length1 internalArray) - 1] do
-            let cur = internalArray.[x,y]
-            yield sprintf "%i" cur.pl
-        } |> String.concat " "
-
-    member this.ToTextLines =        
-        seq {
-            for y in [0..(Array2D.length2 internalArray) - 1] do
-                yield this.RowToLine y
-        }
-
-    member __.GetRBEdges (s:int) (c:Coord) =          
-        seq {
-            if s % 2 <> 0 then
-                for y in [c.y..c.y+s-1] do
-                   yield {x=c.x+s-1;y=y}
-                for x in [c.x..c.x+s-2] do
-                    yield {x=x;y=c.y+s-1}
-        }
-
-    member __.GetOffsets (s:int) (c:Coord) =
-        seq {
-            yield c
-            yield c.Offset (s,0)
-            yield c.Offset (0, s)
-            yield c.Offset (s, s)
-        }     
+        this.AllCells size 
+        |> Seq.map (fun fc -> (fc.c, this.AreaSum size fc.c))  
 
 let sizeToMax (g:Grid) (s:int) =
-    g.BlocksSeq s |> PSeq.map (fun c -> (c, g.MemBlockLevel s c)) |> PSeq.maxBy (fun (_,pl) -> pl)
+    g.Blocks s |> Seq.maxBy (fun (_,pl) -> pl)
 
-let execute = fun d ->
-    let g = Grid (300,300,d)
+let execute = fun d ->    
+    let g = Grid (300,d)    
+    g.BuildSAT
+
     let (c,_) = 3 |> sizeToMax g
     printfn "Day 11 - part 1: Largest power coordingate is %i,%i" (c.x) (c.y)
 
-    let (s,(c,_)) = [1..300] |> List.map (fun s -> (s, s |> sizeToMax g)) |> List.maxBy (fun (_,(_,p)) -> p)
+    let (s,(c,_)) = 
+        [1..300] 
+        |> PSeq.withDegreeOfParallelism 10 
+        |> PSeq.map (fun s -> (s, s |> sizeToMax g)) 
+        |> Seq.maxBy (fun (_,(_,p)) -> p)
+
     printfn "Day 11 - part 2: Largest power coordingate is %i,%i,%i" (c.x) (c.y) s
 
 
