@@ -27,7 +27,7 @@ let main argv =
            | "8" -> Eight.dataSet |> Eight.execute; true
            | "9" -> Nine.dataSet |> Nine.execute; true
            | "10" -> Ten.dataSet |> Ten.execute; true
-           | "11" -> 6392 |> Eleven.execute; true
+           | "11" -> Eleven.serialNumber |> Eleven.execute; true
            | "12" -> Twelve.dataSet |> Twelve.execute; true
            | _ -> printfn "Value %s not matched" d; false
 

@@ -84,5 +84,6 @@ let execute = fun d ->
 
     printfn "Day 11 - part 2: Largest power coordingate is %i,%i,%i" (c.x) (c.y) s
 
+let serialNumber = 6392
 
 
