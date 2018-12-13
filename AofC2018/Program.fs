@@ -29,11 +29,15 @@ let main argv =
            | "10" -> Ten.dataSet |> Ten.execute; true
            | "11" -> 6392 |> Eleven.execute; true
            | "12" -> Twelve.dataSet |> Twelve.execute; true
-           | _ -> false
+           | _ -> printfn "Value %s not matched" d; false
 
     let success = fun (s:bool,t:TimeSpan) -> 
         if s then printfn "Done in %ims" (int t.TotalMilliseconds) else Console.WriteLine "Error"
 
-    Console.WriteLine "Enter day number:" 
-    inputs |> Seq.map (duration selectDay) |> Seq.iter success
+    if argv.Length > 0 then
+        printfn "Starting with %s..." argv.[0]
+        Seq.ofArray argv |> Seq.map (duration selectDay) |> Seq.iter success
+    else
+        Console.WriteLine "Enter day number:" 
+        inputs |> Seq.map (duration selectDay) |> Seq.iter success
     0 // return an integer exit code
