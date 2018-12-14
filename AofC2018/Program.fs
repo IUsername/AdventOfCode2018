@@ -30,6 +30,7 @@ let main argv =
            | "11" -> Eleven.serialNumber |> Eleven.execute; true
            | "12" -> Twelve.dataSet |> Twelve.execute; true
            | "13" -> Thirteen.dataSet |> Thirteen.execute; true
+           | "14" -> Fourteen.input |> Fourteen.execute; true
            | _ -> printfn "Value %s not matched" d; false
 
     let success = fun (s:bool,t:TimeSpan) -> 
