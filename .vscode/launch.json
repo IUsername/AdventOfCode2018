@@ -17,14 +17,14 @@
             "internalConsoleOptions": "openOnSessionStart"
         },
         {
-            "name": ".NET Core Internal Console",
+            "name": ".NET Core Terminal",
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "build",
             "program": "${workspaceFolder}/AofC2018/bin/Debug/netcoreapp2.2/AofC2018.dll",
-            "args": ["11","10"],
+            "args": [],
             "cwd": "${workspaceFolder}",
-            "console": "internalConsole",
+            "console": "integratedTerminal",
             "stopAtEntry": false,
             "internalConsoleOptions": "openOnSessionStart"
         },
