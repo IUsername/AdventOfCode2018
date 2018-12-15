@@ -2,7 +2,7 @@
 
 open System.Collections.Generic
 
-type ElfState = {aIndex:int; bIndex:int; aValue:int; bValue:int; count:int}
+type ElfState = {aIndex:int; bIndex:int; aValue:int; bValue:int; count:int; pe:int list}
 
 type Queues = {aQ:Queue<int>; bQ:Queue<int>}
 
@@ -20,23 +20,8 @@ let private toBigInt (ls:int list) =
 let private sumToDigitList (a:int, b:int) =
     (a + b) |> toDigitList
 
-let private forward (i:int) (count:int) (length:int) (ls:int list) = 
-    let i' = (i + count) % length
-    (i', ls.Item i')
-
-let private runRound (state:ElfState,ls:int list) =
-    let sumList = (state.aValue, state.bValue) |> sumToDigitList
-    let ls' = ls @ sumList
-    let count' = state.count + sumList.Length
-    let (aIndex',aValue') = ls' |> forward state.aIndex (state.aValue + 1) count'
-    let (bIndex',bValue') = ls' |> forward state.bIndex (state.bValue + 1) count'    
-    ({state with
-        aIndex = aIndex'; 
-        bIndex=bIndex'; 
-        aValue=aValue'; 
-        bValue=bValue';
-        count=count'
-     }, ls')
+let private buildPE (state:ElfState) (sumList:int list) = 
+    (sumList |> List.rev) @ state.pe |> List.take state.pe.Length
 
 let private buildQueues (state:ElfState,ls:int list) =    
     let tA = ls |> List.skip (state.aIndex + 1)
@@ -45,13 +30,18 @@ let private buildQueues (state:ElfState,ls:int list) =
     let bQ = Queue<int>(tB)
     ({Queues.aQ=aQ;bQ=bQ}, ls |> List.rev, state)
 
-let private enqueue (queues:Queues) (ls:int list) =
-    ls |> List.iter (fun n -> 
+let private enqueue (queues:Queues) (ls:seq<int>) =
+    ls |> Seq.iter (fun n -> 
         queues.aQ.Enqueue n
         queues.bQ.Enqueue n)
 
-let private dequeue (count:int) (queue:Queue<int>) = 
+let private enqueueOne (queue:Queue<int>) (s:seq<int>) =
+    s |> Seq.iter (fun n -> queue.Enqueue n)
+
+let private dequeue2 (count:int) (queue:Queue<int>) (rls:int list) = 
     let rec loop (r:int) (q:Queue<int>) = 
+        if q.Count = 0 then
+            enqueueOne q (rls |> Seq.rev)
         let cur = q.Dequeue()
         let r' = r - 1
         match r' with 
@@ -69,55 +59,85 @@ let private addToHead (ls:int list) (add:int list) =
 let private runQueueRound (queues:Queues, rls:int list, state:ElfState) =
     let sumList = (state.aValue, state.bValue) |> sumToDigitList
     enqueue queues sumList
+    let rls' = addToHead rls sumList
     let count' = state.count + sumList.Length
     let aStep = state.aValue + 1
-    let aValue' = dequeue aStep queues.aQ
+    let aValue' = dequeue2 aStep queues.aQ rls'
     let aIndex' = state.aIndex + aStep
     let bStep = state.bValue + 1
-    let bValue' = dequeue bStep queues.bQ
+    let bValue' = dequeue2 bStep queues.bQ rls'
     let bIndex' = state.bIndex + bStep
+    let pe' = buildPE state sumList
     let state' = {state with 
                     aIndex = aIndex';
                     bIndex = bIndex';
                     aValue = aValue';
                     bValue = bValue';
-                    count = count'}
-    (queues, addToHead rls sumList, state')
+                    count = count';
+                    pe=pe'}
+    (queues, rls', state')
 
 let private runQueueToCount (max:int) (state:ElfState,ls:int list) = 
     let rec loop (t:int) (queues:Queues, rls:int list, state':ElfState) =
         match state'.count = t with
         | true -> (state', rls |> List.rev)
-        | false -> 
-            if queues.aQ.Count < 18 || queues.bQ.Count < 18 then
-                (state', rls |> List.rev)
-            else
+        | false ->            
                 let r = runQueueRound (queues, rls, state')
                 loop t r
     let init = buildQueues (state,ls)
     loop max init
 
 let rec countRecipes (max:int) (state:ElfState,ls:int list) =        
-    match state.count = max with
+    runQueueToCount max (state,ls)
+
+let rec listStartsWith (segment:int list) (ls:int list) =
+    match segment with
+    | [] -> true
+    | h::t -> 
+        match ls with
+        | [] -> false
+        | lsh::lst -> 
+            match h = lsh with
+            | true  -> listStartsWith t lst
+            | false -> false
+
+let private runQueueToMatch (el:int list) (state:ElfState,ls:int list) = 
+    let rec loop (el':int list) (queues:Queues, rls:int list, state':ElfState) =
+        match listStartsWith state'.pe el' with
+        | true -> (state', rls |> List.rev)
+        | false -> 
+            let r = runQueueRound (queues, rls, state')
+            loop el' r
+    let init = buildQueues (state,ls)
+    loop el init
+
+let rec matchEnd (el:int list) (state:ElfState,ls:int list) =        
+    match listStartsWith state.pe el with
     | true -> (state,ls)
     | false ->
-        let aDelta = state.count - state.aIndex - 1
-        let bDelta = state.count - state.bIndex - 1
-        if aDelta > 36 && bDelta > 36 then
-            let r = runQueueToCount max (state,ls)
-            countRecipes max r
-        else
-            countRecipes max (runRound (state,ls))
+        let r = runQueueToMatch el (state,ls)
+        matchEnd el r
 
-let rec getScoresAfter (count:int) (numAfter:int) (state:ElfState,ls:int list) =        
+let getScoresAfter (count:int) (numAfter:int) (state:ElfState,ls:int list) =        
     let (_,ls') = countRecipes (count+numAfter) (state,ls)
     ls' |> List.skip count |> toBigInt
 
+let getCountBeforeMatch (toMatch:int) (state:ElfState,ls:int list) =        
+    let endL = toMatch |> toDigitList |> List.rev
+    let initPE = List.init endL.Length (fun _ -> -1)
+    let state' = {state with pe=initPE}
+    let (state'',_) = matchEnd endL (state',ls)
+    state''.count - endL.Length
+
 let execute = fun d ->
     let list = [3;7]
-    let state = {aIndex=0;bIndex=1;aValue=3;bValue=7;count=2}
+    let state = {aIndex=0;bIndex=1;aValue=3;bValue=7;count=2;pe=[-1]}
     let r = getScoresAfter d 10 (state,list)
     printfn "%A" r
+
+   
+    let r2 = getCountBeforeMatch d (state,list)
+    printfn "%A" r2
 
 let input = 652601
 
