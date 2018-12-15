@@ -25,6 +25,9 @@ let private toDigitList8 (n:int) =
 let private toBigInt (ls:int list) =
     ls |> List.rev |> List.mapi (fun i d -> bigint.Pow(bigint 10,i) * bigint d) |> List.sum
 
+let private toBigInt8 (ls:seq<int8>) =
+    ls |> Seq.rev |> Seq.mapi (fun i d -> bigint.Pow(bigint 10,i) * bigint ((int)d)) |> Seq.sum
+
 let private sumToDigitList (a:int, b:int) =
     (a + b) |> toDigitList
 
@@ -158,6 +161,7 @@ let gen (d:int) =
         elf2 <- (elf2 + int v2 + 1) % len
         let index = len-matchCount
         if index > 1 then
+            // Check end twice since two recipes may have been added from the score
             let endRange = scores.GetRange(index-1, matchCount)
             working <- not (areEqual toMatch endRange )
             if working then
@@ -165,15 +169,14 @@ let gen (d:int) =
                 working <- not (areEqual toMatch endRange )    
             else
                 shift <- -1
-    scores.Count - matchCount + shift
+    let part1 = scores.GetRange(d, 10) |> toBigInt8
+    let part2 = scores.Count - matchCount + shift
+    (part1,part2)
 
 let execute = fun d ->
-    let list = [3;7]
-    let state = {aIndex=0;bIndex=1;aValue=3;bValue=7;count=2;pe=[-1]}
-    let r = getScoresAfter d 10 (state,list)
-    printfn "%A" r
-    let r2 = (gen d)
-    printfn "%A" r2
+    let (p1,p2) = (gen d)
+    printfn "%A" p1
+    printfn "%A" p2
 
 let input = 652601
 
