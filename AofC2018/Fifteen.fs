@@ -8,32 +8,15 @@ type CaveCell = | Wall | Open
 
 type Creature = | Elf | Goblin
 
-type CreatureInfo = {kind:Creature; hp:int}
+type CreatureInfo = {guid:int; kind:Creature; hp:int}
+
+type CreatureState = (Point*CreatureInfo)
 
 type CreatureCell = | Occupied of CreatureInfo | Unoccupied
 
-type Weight = | Blocked | Weight of weight:int
+type Lookup = Point -> (Point*CreatureInfo) option
 
-type Node = {p:Point;weight:Weight}
-
-type Lookup = Point -> Point -> Node option
-
-type Traveral =
-    {
-        from: Dictionary<Node,Node>
-        costs: Dictionary<Node,int>
-        path: Node list
-        first: Point
-        total: int
-    }           
-    static member empty =
-        {
-            from = Dictionary<Node,Node>()
-            costs = Dictionary<Node,int>()
-            path = []
-            first = (0,0)
-            total = 0
-        }
+type IsOpen = Point -> bool
 
 type XYGrid<'T>(N:int, M:int, init:'T) = 
     let array = Array2D.create N M init
@@ -52,106 +35,54 @@ type XYGrid<'T>(N:int, M:int, init:'T) =
 
 let cross = [(0,-1);(-1,0);(1,0);(0,1)] 
 
-let cost n = match n.weight with | Weight w -> w | Blocked -> failwith "no cost with blocked node"
-
 let manhattan (pA:Point) (pB:Point) = abs (fst pA - fst pB) + abs (snd pA - snd pB)
+
+let isAdjacent (pA:Point) (pB:Point) = (manhattan pA pB) = 1
 
 let offset (delta:Point) (p:Point) = ((fst p + fst delta),(snd p + snd delta))
 
-let neighbors (l:Lookup) node goal =
-    cross 
-        |> List.map (fun delta -> node.p |> offset delta |> l goal)
-        |> List.choose id  
-        
-let buildPath t start goal =
-    let mutable current = goal
-    let mutable total = cost goal
-    let mutable path = [current]
-    while current <> start do
-        current <- t.from.[current]
-        path <- current::path
-        total <- total + cost current
-    let first = path |> List.skip 1 |> List.head
-    {t with path=path; total=total;first=first.p}
-
-let sortByCostAndReadOrder = fun (node,cost) -> 
-    let (x,y) = node.p
-    cost,y,x
-
-let aStar (l:Lookup) start goal =
-    let mutable (frontier:(Node*int) list) = []
-    let enqueue value = frontier <- value::frontier
-    let dequeue () =
-        let sorted = frontier |> List.sortBy sortByCostAndReadOrder
-        frontier <- sorted.Tail
-        sorted.Head
-
-    enqueue (start,cost start)
-
-    let t = Traveral.empty
-    t.from.[start] <- start
-    t.costs.[start] <- cost start
-
-    let mutable foundGoal = false
-    while frontier.Length > 0 && not(foundGoal) do
-        let current,_ = dequeue()
-        if current = goal then foundGoal <- true
-        if not(foundGoal) then
-            neighbors l current goal.p
-            |> List.iter (fun n ->
-                let cost' = t.costs.[current] + cost n
-                if (not(t.costs.ContainsKey n) || cost' < t.costs.[n]) then   
-                    t.costs.[n] <- cost'
-                    let priority = cost'// + manhattan n.p goal.p
-                    enqueue (n,priority)
-                    t.from.[n] <- current)
-    if foundGoal then
-        Some (buildPath t start goal)
-    else None
+let neighbors (l:Lookup) (p:Point) =
+    cross |> List.map (fun d -> offset d p |> l) |> List.choose id  
 
 let zipGrids (a:XYGrid<_>) (b:XYGrid<_>) = 
     a.CellSeqP |> Seq.zip b.CellSeqP |> Seq.map (fun ((p,ac),(_,bc)) -> (p,(ac,bc)))
 
-let createLookup (cave:XYGrid<CaveCell>) (creatures:XYGrid<CreatureCell>) =
-    (fun g p ->
-        match cave.[p] with
-        | Wall -> None
-        | Open -> match creatures.[p] with
-                    | Unoccupied -> Some {p=p;weight=(Weight 1)}
-                    | Occupied _ when p=g -> Some {p=p;weight=(Weight 1)}
-                    | _          -> None)
-
-let toNode (p:Point) = {p=p;weight=(Weight 1)}
-
-let private neighborEnemies (creatures:XYGrid<CreatureCell>) (p:Point,i:CreatureInfo) =
-    let creatureFilter = fun kind (p,cell) ->
-        match cell with
+let createLookup (creatures:XYGrid<CreatureCell>) : Lookup =
+    (fun p ->
+        match creatures.[p] with
         | Unoccupied -> None
-        | Occupied ci when ci.kind<>kind -> Some (p,ci)
-        | _ -> None
-    let near = cross |> List.map (fun delta -> p |> offset delta |> (fun p' -> (p',creatures.[p'])))
-    near |> List.map (creatureFilter i.kind) |> List.choose id
+        | Occupied o -> Some (p,o))
+
+let createIsOpen (cave:XYGrid<CaveCell>) (creatures:XYGrid<CreatureCell>) : IsOpen =
+    (fun p ->
+        match cave.[p] with
+        | Wall -> false
+        | Open -> match creatures.[p] with
+                    | Unoccupied -> true
+                    | Occupied _ -> false)
 
 let private findCreatures (creatures:XYGrid<CreatureCell>) =
-    creatures.CellSeqP |> Seq.map (fun (p,c) -> 
-        match c with
-        | Unoccupied -> None
-        | Occupied i -> Some (p,i))
+    creatures.CellSeqP 
+        |> Seq.map (fun (p,c) -> 
+            match c with
+            | Unoccupied -> None
+            | Occupied i -> Some (p,i)) 
+        |> Seq.choose id
 
-let findEnemies (p:Point,i:CreatureInfo) (c:seq<Point*CreatureInfo>) =
-    c |> Seq.filter (fun (p',ci) -> ci.kind <> i.kind && p <> p')
+let findEnemies (i:CreatureInfo) (c:seq<Point*CreatureInfo>) =
+    c |> Seq.filter (fun (_,ci) -> ci.kind <> i.kind)
         
 let private charToCaveCell (ch:char) =
     match ch with | '#' -> Wall | _ -> Open
 
-let private charToCreatureCell (hp:int) (ch:char) =
+let private charToCreatureCell (identifier:(unit->int)) (hp:int) (ch:char)  =
     match ch with
-    | 'G' -> Occupied {kind=Goblin;hp=hp}
-    | 'E' -> Occupied {kind=Elf;hp=hp}
+    | 'G' -> Occupied {guid=identifier();kind=Goblin;hp=hp}
+    | 'E' -> Occupied {guid=identifier();kind=Elf;hp=hp}
     |  _  -> Unoccupied
 
-let private charToCaveCreatures (hp:int) (p:Point) (ch:char) =
-    (p, (charToCaveCell ch), (charToCreatureCell hp ch))
+let private charToCaveCreatures (identifier:(unit->int)) (hp:int) (p:Point) (ch:char) =
+    (p, (charToCaveCell ch), (charToCreatureCell identifier hp ch))
 
 let private caveCellToStr (cell:CaveCell) =
     match cell with | Wall -> "#" | Open -> "."
@@ -173,63 +104,95 @@ let private infoToStr (crc:CreatureCell,cc:CaveCell) =
 let private mapLine f (y:int,l:string) =
     l.ToCharArray() |> Array.toSeq |> Seq.mapi (fun x ch -> f (x,y) ch)
 
-let private checkConflict (creatures:XYGrid<CreatureCell>) =
-    let all = creatures |> findCreatures |> Seq.choose id |> List.ofSeq
-    all |> List.countBy (fun (_,ci) -> ci.kind) |> List.length > 1
+let private fightCreature (creatures:XYGrid<CreatureCell>) (p:Point,ci:CreatureInfo) =
+    let hp' = ci.hp - 3
+    if hp' < 1 then
+        creatures.[p] <- Unoccupied
+    else 
+        creatures.[p] <- Occupied {ci with hp=hp'}
+    
+let private takeStep enemies creatures cave (creature:CreatureState) =
+    let isOpen = createIsOpen cave creatures 
+    
+    let (location,ci) = creature
+    let queue = Queue<Point>()
+    let from = Dictionary<Point,Point>()
+    queue.Enqueue(location)
+    from.Add (location,(-1,-1))
 
-let private fight (creatures:XYGrid<CreatureCell>) (p:Point,i:CreatureInfo) =
-    let near = neighborEnemies creatures (p,i)
-    let weakest = near |> List.sortBy (fun ((x,y),ci) -> ci.hp,y,x) |> List.tryHead
-    match weakest with
+    while queue.Count > 0 do    
+        let p' = queue.Dequeue()
+        cross 
+            |> Seq.map (offset p') 
+            |> Seq.filter isOpen 
+            |> Seq.filter (from.ContainsKey >> not)
+            |> Seq.iter (fun n -> queue.Enqueue(n); from.Add(n,p'))
+
+    let getPath = (fun p ->
+        if not(from.ContainsKey(p)) then None 
+        else
+            let mutable current = p
+            let mutable path = []
+            while current <> location do
+                path <- current::path
+                current <- from.[current]
+            Some path)
+
+    let inRange = enemies 
+                |> Seq.map (fun (p,_) -> cross |> Seq.map (offset p)) 
+                |> Seq.concat 
+                |> Seq.distinct
+                |> Seq.filter isOpen   
+                |> List.ofSeq
+
+    let bestPath = inRange 
+                |> Seq.map (fun t -> (t, getPath t)) 
+                |> Seq.choose (fun (t,po) -> match po with | Some p -> Some (t,p) | _ -> None)
+                |> Seq.sortBy (fun ((x,y),p) -> p.Length, y, x)
+                |> Seq.map snd
+                |> Seq.tryHead
+
+    match bestPath with     
+    | None      -> location
+    | Some path -> 
+            let firstStep = path |> List.head
+            creatures.[location]  <- Unoccupied
+            creatures.[firstStep] <- Occupied ci 
+            firstStep
+
+let private tryFindCreature (creatures:XYGrid<CreatureCell>) (guid:int) =
+    creatures |> findCreatures |> Seq.tryFind (fun (_,ci) -> ci.guid=guid)
+
+let private move (creatures:XYGrid<CreatureCell>) (cave:XYGrid<CaveCell>) (guid:int) =    
+    let info = guid |> tryFindCreature creatures   
+    match info with
     | None -> true
-    | Some (p,ci) -> 
-        let hp' = ci.hp - 3
-        if hp' < 1 then
-            creatures.[p] <- Unoccupied
-            checkConflict creatures
-        else 
-            creatures.[p] <- Occupied {ci with hp=hp'}
-            true
+    | Some (l,ci) ->
+        let mutable location = l
+        let enemies = creatures |> findCreatures |> findEnemies ci |> List.ofSeq
+        if enemies |> List.isEmpty then
+            false
+        else
+            let adjacent = enemies |> Seq.filter (fun (p,_) -> isAdjacent location p) 
+            if adjacent |> Seq.isEmpty then location <- takeStep enemies creatures cave (l,ci)
+            let bestAdjacent = enemies |> Seq.filter (fun (p,_) -> isAdjacent location p) |> Seq.sortBy (fun ((x,y),i) -> i.hp,y,x) |> Seq.tryHead
+            match bestAdjacent with
+            | Some eci -> fightCreature creatures eci; true
+            | None -> true     
 
-let private move (l:Lookup) (creatures:XYGrid<CreatureCell>) (cr:(Point*CreatureInfo)) =
-    let cc' = creatures.[fst cr]
-    match cc' with
-    | Unoccupied -> true
-    | Occupied _ ->
-        let all = creatures |> findCreatures |> Seq.choose id
-        let enemies = all |> findEnemies cr
-        let path = enemies 
-                    |> Seq.map (fun e -> aStar l (toNode (fst cr)) (toNode (fst e))) 
-                    |> Seq.choose id                 
-                    |> Seq.sortBy (fun t -> 
-                        let target = t.path |> List.last
-                        let (x,y) = target.p
-                        t.total,y,x)                   
-                    |> Seq.tryHead    
-        match path with
-        | None -> true
-        | Some t when t.path.Length < 3 -> // Cannot move on top of goal
-            fight creatures cr 
-        | Some t ->       
-            let p = fst cr
-            creatures.[p] <- Unoccupied
-            creatures.[t.first] <- Occupied (snd cr)
-            fight creatures (t.first, snd cr) 
-
-let private moveAll (l:Lookup) (creatures:XYGrid<CreatureCell>) =
-    let all = creatures |> findCreatures |> Seq.choose id |> List.ofSeq
-    let results = all |> List.map (fun cr -> move l creatures cr) 
-    let endFighting = not(results |> List.forall id)
-    if endFighting then
-        let completedRound = results |> List.findIndex (fun r -> r = false) = results.Length - 1
-        (true, completedRound)
-    else
-        (false, true)
+let private moveAll (creatures:XYGrid<CreatureCell>) (cave:XYGrid<CaveCell>) =
+    let mutable continueFight = true
+    let all = creatures |> findCreatures |> Seq.map (fun (_,ci) -> ci.guid) |> List.ofSeq
+    all |> Seq.takeWhile (fun _ -> continueFight) |> Seq.iter (fun cr -> continueFight <- move creatures cave cr) 
+    continueFight    
     
 let private outcome (round:int) (creatures:XYGrid<CreatureCell>) =
-     let all = creatures |> findCreatures |> Seq.choose id |> List.ofSeq
-     let sum = all |> List.sumBy (fun (_,ci) -> ci.hp)
+     let sum = creatures |> findCreatures |> Seq.sumBy (fun (_,ci) -> ci.hp)
      sum * round
+
+let createIdentifier =
+    let mutable current = 0
+    (fun () -> current <- current + 1; current)
 
 let private printMap (width:int) cave creatures  =
     zipGrids cave creatures |> Seq.map snd |> Seq.splitInto width |> Seq.map (concatMap infoToStr) |> Seq.iter (printfn "%s") 
@@ -240,29 +203,28 @@ let execute = fun d ->
     let M = lines |> Seq.head |> (fun l -> l.Length)
     let cave = XYGrid<CaveCell>(N,M,Open)
     let creatures = XYGrid<CreatureCell>(N,M,Unoccupied)
-    let parsed = lines |> Seq.indexed |> Seq.map (mapLine (charToCaveCreatures 200)) |> Seq.concat
+    let identifier = createIdentifier
+    let parsed = lines |> Seq.indexed |> Seq.map (mapLine (charToCaveCreatures identifier 200)) |> Seq.concat
     parsed |> Seq.iter (fun (p,cc,crc) -> cave.[p] <- cc; creatures.[p] <- crc)
-    printMap N cave creatures 
+    //printMap N cave creatures 
 
     let mutable round = 0
     let mutable fighting = true
-    let l = createLookup cave creatures
     while fighting do   
-        let (endMatch,completedRound) = moveAll l creatures           
-        if completedRound then
+        fighting <- moveAll creatures cave           
+        if fighting then
             round <- round + 1 
-            printfn ""
-            printfn "Round %i" round
-            printMap N cave creatures
-            let all = creatures |> findCreatures |> Seq.choose id |> List.ofSeq |> List.map (fun (_,ci) -> ci.hp)
-            printfn "%A" all        
-        fighting <- not(endMatch)
+            //printfn ""
+            //printfn "Round %i" round
+            //printMap N cave creatures
+            //let all = creatures |> findCreatures |> Seq.map (fun (_,ci) -> ci.hp)
+            //printfn "%A" all      
     
     let outcome = creatures |> outcome round
-    printfn "Outcome %i after round %i" outcome round
-    printMap N cave creatures 
-    let all = creatures |> findCreatures |> Seq.choose id |> List.ofSeq |> List.map (fun (_,ci) -> ci.hp)
-    printfn "%A" all
+    printfn "Day 14 - part 1: Outcome %i after round %i" outcome round
+    //printMap N cave creatures 
+    //let all = creatures |> findCreatures |> Seq.map (fun (_,ci) -> ci.hp)
+    //printfn "%A" all
 
 let testSet1 = @"
 #########
