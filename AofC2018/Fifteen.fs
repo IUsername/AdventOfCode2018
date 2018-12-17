@@ -8,7 +8,7 @@ type CaveCell = | Wall | Open
 
 type Creature = | Elf | Goblin
 
-type CreatureInfo = {guid:int; kind:Creature; hp:int}
+type CreatureInfo = {guid:int; kind:Creature; hp:int;}
 
 type CreatureState = (Point*CreatureInfo)
 
@@ -20,11 +20,9 @@ type IsOpen = Point -> bool
 
 type XYGrid<'T>(N:int, M:int, init:'T) = 
     let array = Array2D.create N M init
-
     member __.Item
         with get (p:Point) = array.[snd p, fst p]
         and  set (p:Point) (value: 'T) = array.[snd p, fst p] <- value  
-
     member this.CellSeqP = 
         seq {
             for y in [0..N-1] do
@@ -48,18 +46,16 @@ let zipGrids (a:XYGrid<_>) (b:XYGrid<_>) =
     a.CellSeqP |> Seq.zip b.CellSeqP |> Seq.map (fun ((p,ac),(_,bc)) -> (p,(ac,bc)))
 
 let createLookup (creatures:XYGrid<CreatureCell>) : Lookup =
-    (fun p ->
-        match creatures.[p] with
-        | Unoccupied -> None
-        | Occupied o -> Some (p,o))
+    (fun p -> match creatures.[p] with
+                | Unoccupied -> None
+                | Occupied o -> Some (p,o))
 
 let createIsOpen (cave:XYGrid<CaveCell>) (creatures:XYGrid<CreatureCell>) : IsOpen =
-    (fun p ->
-        match cave.[p] with
-        | Wall -> false
-        | Open -> match creatures.[p] with
-                    | Unoccupied -> true
-                    | Occupied _ -> false)
+    (fun p -> match cave.[p] with
+                | Wall -> false
+                | Open -> match creatures.[p] with
+                            | Unoccupied -> true
+                            | Occupied _ -> false)
 
 let private findCreatures (creatures:XYGrid<CreatureCell>) =
     creatures.CellSeqP 
@@ -104,14 +100,18 @@ let private infoToStr (crc:CreatureCell,cc:CaveCell) =
 let private mapLine f (y:int,l:string) =
     l.ToCharArray() |> Array.toSeq |> Seq.mapi (fun x ch -> f (x,y) ch)
 
-let private fightCreature (creatures:XYGrid<CreatureCell>) (p:Point,ci:CreatureInfo) =
-    let hp' = ci.hp - 3
+let private fightCreature elfAttack (creatures:XYGrid<CreatureCell>) (p:Point,ci:CreatureInfo) =
+    let isElf = ci.kind = Elf
+    let attack = if not isElf then elfAttack else 3
+    let hp' = ci.hp - attack
     if hp' < 1 then
         creatures.[p] <- Unoccupied
+        isElf
     else 
         creatures.[p] <- Occupied {ci with hp=hp'}
+        false
     
-let private takeStep enemies creatures cave (creature:CreatureState) =
+let private takeStep enemies creatures cave creature =
     let isOpen = createIsOpen cave creatures 
     
     let (location,ci) = creature
@@ -122,11 +122,10 @@ let private takeStep enemies creatures cave (creature:CreatureState) =
 
     while queue.Count > 0 do    
         let p' = queue.Dequeue()
-        cross 
-            |> Seq.map (offset p') 
-            |> Seq.filter isOpen 
-            |> Seq.filter (from.ContainsKey >> not)
-            |> Seq.iter (fun n -> queue.Enqueue(n); from.Add(n,p'))
+        cross |> Seq.map (offset p') 
+              |> Seq.filter isOpen 
+              |> Seq.filter (from.ContainsKey >> not)
+              |> Seq.iter (fun n -> queue.Enqueue(n); from.Add(n,p'))
 
     let getPath = (fun p ->
         if not(from.ContainsKey(p)) then None 
@@ -160,31 +159,46 @@ let private takeStep enemies creatures cave (creature:CreatureState) =
             creatures.[firstStep] <- Occupied ci 
             firstStep
 
-let private tryFindCreature (creatures:XYGrid<CreatureCell>) (guid:int) =
+let private tryFindCreature creatures guid =
     creatures |> findCreatures |> Seq.tryFind (fun (_,ci) -> ci.guid=guid)
 
-let private move (creatures:XYGrid<CreatureCell>) (cave:XYGrid<CaveCell>) (guid:int) =    
+let private move elfAttack creatures cave guid =    
     let info = guid |> tryFindCreature creatures   
     match info with
-    | None -> true
+    | None -> (true,false)
     | Some (l,ci) ->
         let mutable location = l
         let enemies = creatures |> findCreatures |> findEnemies ci |> List.ofSeq
-        if enemies |> List.isEmpty then
-            false
+        if enemies |> List.isEmpty 
+            then (false,false)
         else
             let adjacent = enemies |> Seq.filter (fun (p,_) -> isAdjacent location p) 
-            if adjacent |> Seq.isEmpty then location <- takeStep enemies creatures cave (l,ci)
-            let bestAdjacent = enemies |> Seq.filter (fun (p,_) -> isAdjacent location p) |> Seq.sortBy (fun ((x,y),i) -> i.hp,y,x) |> Seq.tryHead
-            match bestAdjacent with
-            | Some eci -> fightCreature creatures eci; true
-            | None -> true     
 
-let private moveAll (creatures:XYGrid<CreatureCell>) (cave:XYGrid<CaveCell>) =
+            if adjacent |> Seq.isEmpty then 
+                location <- takeStep enemies creatures cave (l,ci)
+
+            let bestAdjacent = enemies 
+                                |> Seq.filter (fun (p,_) -> isAdjacent location p) 
+                                |> Seq.sortBy (fun ((x,y),i) -> i.hp,y,x) 
+                                |> Seq.tryHead
+
+            match bestAdjacent with
+            | Some eci -> (true,fightCreature elfAttack creatures eci)
+            | None -> (true,false)    
+
+let private moveAll stopOnElfDeath elfAttack creatures cave =
     let mutable continueFight = true
-    let all = creatures |> findCreatures |> Seq.map (fun (_,ci) -> ci.guid) |> List.ofSeq
-    all |> Seq.takeWhile (fun _ -> continueFight) |> Seq.iter (fun cr -> continueFight <- move creatures cave cr) 
-    continueFight    
+    let mutable elfDied = false;
+    creatures 
+        |> findCreatures 
+        |> List.ofSeq
+        |> Seq.map (fun (_,ci) -> ci.guid) 
+        |> Seq.takeWhile (fun _ -> continueFight && not(stopOnElfDeath && elfDied) ) 
+        |> Seq.iter (fun cr -> 
+            let (c,e) = move elfAttack creatures cave cr
+            continueFight <- c
+            elfDied <- e) 
+    (continueFight,elfDied)    
     
 let private outcome (round:int) (creatures:XYGrid<CreatureCell>) =
      let sum = creatures |> findCreatures |> Seq.sumBy (fun (_,ci) -> ci.hp)
@@ -195,7 +209,11 @@ let createIdentifier =
     (fun () -> current <- current + 1; current)
 
 let private printMap (width:int) cave creatures  =
-    zipGrids cave creatures |> Seq.map snd |> Seq.splitInto width |> Seq.map (concatMap infoToStr) |> Seq.iter (printfn "%s") 
+    zipGrids cave creatures 
+    |> Seq.map snd 
+    |> Seq.splitInto width 
+    |> Seq.map (concatMap infoToStr) 
+    |> Seq.iter (printfn "%s") 
 
 let execute = fun d ->     
     let lines = d |> Parsing.splitLines
@@ -204,14 +222,17 @@ let execute = fun d ->
     let cave = XYGrid<CaveCell>(N,M,Open)
     let creatures = XYGrid<CreatureCell>(N,M,Unoccupied)
     let identifier = createIdentifier
-    let parsed = lines |> Seq.indexed |> Seq.map (mapLine (charToCaveCreatures identifier 200)) |> Seq.concat
+    let parsed = lines |> Seq.indexed |> Seq.map (mapLine (charToCaveCreatures identifier 200)) |> Seq.concat |> List.ofSeq
     parsed |> Seq.iter (fun (p,cc,crc) -> cave.[p] <- cc; creatures.[p] <- crc)
     //printMap N cave creatures 
 
     let mutable round = 0
     let mutable fighting = true
+    let mutable elfDied = false;
     while fighting do   
-        fighting <- moveAll creatures cave           
+        let (f,e) = moveAll false 3 creatures cave           
+        fighting <- f
+        elfDied <- e
         if fighting then
             round <- round + 1 
             //printfn ""
@@ -220,84 +241,38 @@ let execute = fun d ->
             //let all = creatures |> findCreatures |> Seq.map (fun (_,ci) -> ci.hp)
             //printfn "%A" all      
     
-    let outcome = creatures |> outcome round
-    printfn "Day 14 - part 1: Outcome %i after round %i" outcome round
+    let outcome1 = creatures |> outcome round
+    printfn "Day 14 - part 1: Outcome %i after round %i" outcome1 round
     //printMap N cave creatures 
     //let all = creatures |> findCreatures |> Seq.map (fun (_,ci) -> ci.hp)
     //printfn "%A" all
 
-let testSet1 = @"
-#########
-#G..G..G#
-#.......#
-#.......#
-#G..E..G#
-#.......#
-#.......#
-#G..G..G#
-#########
-"
+    elfDied <- true  
+    let mutable elfAttack = 4
+    let mutable outcome2 = 0
 
-let testSet2 = @"
-#######   
-#.G...#   
-#...EG#   
-#.#.#G#   
-#..G#E#   
-#.....#   
-#######
-"
-let testSet3 = @"
-#######
-#G..#E#
-#E#E.E#
-#G.##.#
-#...#E#
-#...E.#
-#######
-"
+    while elfDied do
+        let creatures' = XYGrid<CreatureCell>(N,M,Unoccupied)
+        parsed |> Seq.iter (fun (p,_,crc) -> creatures'.[p] <- crc)
 
-let testSet4 = @"
-####### 
-#E..EG# 
-#.#G.E# 
-#E.##E# 
-#G..#.# 
-#..E#.# 
-####### 
-"
+        round <- 0
+        fighting <- true
+        elfDied <- false        
+        
+        while fighting do   
+            let (f,e) = moveAll true elfAttack creatures' cave           
+            fighting <- f
+            elfDied <- e
+            if fighting then
+                round <- round + 1 
+            if elfDied then
+                elfAttack <- elfAttack + 1
+                fighting <- false
 
-let testSet5 = @"
-#######
-#E.G#.#
-#.#G..#
-#G.#.G#
-#G..#.#
-#...E.#
-#######
-"
+        if not elfDied then
+            outcome2 <- creatures' |> outcome round
 
-let testSet6 = @"
-#######
-#.E...#
-#.#..G#
-#.###.#
-#E#G#G#
-#...#G#
-#######
-"
-
-let testSet7 = @"
-#########
-#G......#
-#.E.#...#
-#..##..G#
-#...##..#
-#...#...#
-#.G...G.#
-#.....G.#
-#########
-"
+    printfn "Day 14 - part 2: Outcome %i with attack of %i" outcome2 elfAttack
 
 let dataSet = @"
 ################################
@@ -331,40 +306,5 @@ let dataSet = @"
 ########....###.E..E############
 #########.....##################
 #############.##################
-################################
-"
-
-let dataSet2 = @"
-################################
-#######.G...####################
-#########...####################
-#########.G.####################
-#########.######################
-#########.######################
-#########G######################
-#########.#...##################
-#########.....#..###############
-########...G....###.....########
-#######............G....########
-#######G....G.....G....#########
-######..G.....#####..G...#######
-######...G...#######......######
-#####.......#########....G..E###
-#####.####..#########G...#....##
-####..####..#########..G....E..#
-#####.####G.#########...E...E.##
-#########.E.#########.........##
-#####........#######.E........##
-######........#####...##...#..##
-###...................####.##.##
-###.............#########..#####
-#G#.#.....E.....#########..#####
-#...#...#......##########.######
-#.G............#########.E#E####
-#..............##########...####
-##..#..........##########.E#####
-#..#G..G......###########.######
-#.G.#..........#################
-#...#..#.......#################
 ################################
 "
