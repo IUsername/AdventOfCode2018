@@ -104,16 +104,11 @@ let private fightCreature elfAttack (creatures:XYGrid<CreatureCell>) (p:Point,ci
     let isElf = ci.kind = Elf
     let attack = if not isElf then elfAttack else 3
     let hp' = ci.hp - attack
-    if hp' < 1 then
-        creatures.[p] <- Unoccupied
-        isElf
-    else 
-        creatures.[p] <- Occupied {ci with hp=hp'}
-        false
+    if hp' < 1 then creatures.[p] <- Unoccupied; isElf
+    else creatures.[p] <- Occupied {ci with hp=hp'}; false
     
 let private takeStep enemies creatures cave creature =
-    let isOpen = createIsOpen cave creatures 
-    
+    let isOpenFun = createIsOpen cave creatures     
     let (location,ci) = creature
     let queue = Queue<Point>()
     let from = Dictionary<Point,Point>()
@@ -123,25 +118,24 @@ let private takeStep enemies creatures cave creature =
     while queue.Count > 0 do    
         let p' = queue.Dequeue()
         cross |> Seq.map (offset p') 
-              |> Seq.filter isOpen 
+              |> Seq.filter isOpenFun 
               |> Seq.filter (from.ContainsKey >> not)
               |> Seq.iter (fun n -> queue.Enqueue(n); from.Add(n,p'))
 
     let getPath = (fun p ->
         if not(from.ContainsKey(p)) then None 
-        else
-            let mutable current = p
-            let mutable path = []
-            while current <> location do
-                path <- current::path
-                current <- from.[current]
-            Some path)
+        else let mutable current = p
+             let mutable path = []
+             while current <> location do
+                 path <- current::path
+                 current <- from.[current]
+             Some path)
 
     let inRange = enemies 
                 |> Seq.map (fun (p,_) -> cross |> Seq.map (offset p)) 
                 |> Seq.concat 
                 |> Seq.distinct
-                |> Seq.filter isOpen   
+                |> Seq.filter isOpenFun   
                 |> List.ofSeq
 
     let bestPath = inRange 
@@ -153,11 +147,10 @@ let private takeStep enemies creatures cave creature =
 
     match bestPath with     
     | None      -> location
-    | Some path -> 
-            let firstStep = path |> List.head
-            creatures.[location]  <- Unoccupied
-            creatures.[firstStep] <- Occupied ci 
-            firstStep
+    | Some path -> let firstStep = path |> List.head
+                   creatures.[location]  <- Unoccupied
+                   creatures.[firstStep] <- Occupied ci 
+                   firstStep
 
 let private tryFindCreature creatures guid =
     creatures |> findCreatures |> Seq.tryFind (fun (_,ci) -> ci.guid=guid)
@@ -169,8 +162,7 @@ let private move elfAttack creatures cave guid =
     | Some (l,ci) ->
         let mutable location = l
         let enemies = creatures |> findCreatures |> findEnemies ci |> List.ofSeq
-        if enemies |> List.isEmpty 
-            then (false,false)
+        if enemies |> List.isEmpty then (false,false)
         else
             let adjacent = enemies |> Seq.filter (fun (p,_) -> isAdjacent location p) 
 
@@ -200,15 +192,14 @@ let private moveAll stopOnElfDeath elfAttack creatures cave =
             elfDied <- e) 
     (continueFight,elfDied)    
     
-let private outcome (round:int) (creatures:XYGrid<CreatureCell>) =
-     let sum = creatures |> findCreatures |> Seq.sumBy (fun (_,ci) -> ci.hp)
-     sum * round
+let private outcome round (creatures:XYGrid<CreatureCell>) =
+     round * (creatures |> findCreatures |> Seq.sumBy (fun (_,ci) -> ci.hp))
 
 let createIdentifier =
     let mutable current = 0
     (fun () -> current <- current + 1; current)
 
-let private printMap (width:int) cave creatures  =
+let private printMap width cave creatures  =
     zipGrids cave creatures 
     |> Seq.map snd 
     |> Seq.splitInto width 
@@ -222,9 +213,12 @@ let execute = fun d ->
     let cave = XYGrid<CaveCell>(N,M,Open)
     let creatures = XYGrid<CreatureCell>(N,M,Unoccupied)
     let identifier = createIdentifier
-    let parsed = lines |> Seq.indexed |> Seq.map (mapLine (charToCaveCreatures identifier 200)) |> Seq.concat |> List.ofSeq
+    let parsed = lines 
+                    |> Seq.indexed 
+                    |> Seq.map (mapLine (charToCaveCreatures identifier 200)) 
+                    |> Seq.concat 
+                    |> List.ofSeq
     parsed |> Seq.iter (fun (p,cc,crc) -> cave.[p] <- cc; creatures.[p] <- crc)
-    //printMap N cave creatures 
 
     let mutable round = 0
     let mutable fighting = true
@@ -237,15 +231,11 @@ let execute = fun d ->
             round <- round + 1 
             //printfn ""
             //printfn "Round %i" round
-            //printMap N cave creatures
-            //let all = creatures |> findCreatures |> Seq.map (fun (_,ci) -> ci.hp)
-            //printfn "%A" all      
+            //printMap N cave creatures     
     
     let outcome1 = creatures |> outcome round
     printfn "Day 14 - part 1: Outcome %i after round %i" outcome1 round
     //printMap N cave creatures 
-    //let all = creatures |> findCreatures |> Seq.map (fun (_,ci) -> ci.hp)
-    //printfn "%A" all
 
     elfDied <- true  
     let mutable elfAttack = 4
