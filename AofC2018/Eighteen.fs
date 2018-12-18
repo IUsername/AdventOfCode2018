@@ -6,25 +6,24 @@ type Point = (int*int)
 
 type Acre = | Open | Trees | Lumberyard
     with static member ToCh (a:Acre) =
-            match a with | Open->'.' | Lumberyard->'#' | Trees->'|'
+            match a with | Open->'.' | Lumberyard->'#' | Trees->'|'            
 
-let S (p:Point) = (fst p, snd p+1)
-let W (p:Point) = (fst p-1, snd p)
-let E (p:Point) = (fst p+1, snd p)
-let N (p:Point) = (fst p, snd p-1)
-let NW (p:Point) = (fst p-1, snd p-1)
-let NE (p:Point) = (fst p+1, snd p-1)
-let SE (p:Point) = (fst p+1, snd p+1)
-let SW (p:Point) = (fst p-1, snd p+1)
-let allDir (p:Point) = [(N p);(NE p);(E p);(SE p);(S p);(SW p);(W p);(NW p)]
+let private nearby (x:int,y:int) = 
+    seq {
+        for dx in [-1..1] do
+            for dy in [-1..1] do
+                if not (dx = 0 && dy = 0) then yield (x+dx,y+dy)            
+    }
 
 type XYGrid<'T>(min:Point, max:Point, init:'T) = 
-    let h = snd max - snd min + 1
-    let w = fst max - fst min + 1    
+    let (minX,minY) = min
+    let (maxX,maxY) = max
+    let h = maxY - minY + 1
+    let w = maxX - minX + 1    
     let array = Array2D.create h w init
     member __.Item
-        with get (p:Point) = array.[snd p - snd min, fst p - fst min]
-        and  set (p:Point) (value: 'T) = array.[snd p - snd min, fst p - fst min] <- value  
+        with get ((x,y)) = array.[y - minY, x - minX]
+        and  set ((x,y)) (value: 'T) = array.[y - minY, x - minX] <- value  
     member __.Width = w
     member __.Height = h
     member this.CellSeqP = 
@@ -36,7 +35,7 @@ type XYGrid<'T>(min:Point, max:Point, init:'T) =
         }
     member __.InBounds (p:Point) =
         let (x,y) = p
-        x >= fst min && x <= fst max && y >= snd min && y <= snd max   
+        x >= minX && x <= maxX && y >= minY && y <= maxY   
         
 let genHash (area:XYGrid<Acre>) =
     area.CellSeqP |> Seq.map (fun e -> (hash e)) |> Seq.fold (fun s c -> (s*23)+c) 17
@@ -48,7 +47,7 @@ let hasAtLeast (count:int) (key:'T) (dict:IDictionary<'T,int>) =
 
 let updateAcre (area:XYGrid<Acre>) (p:Point) =
     let a = area.[p]
-    let around = p |> allDir |> List.filter (fun p' -> area.InBounds p') |> List.map (fun p' -> area.[p']) |> List.countBy id |> dict
+    let around = p |> nearby |> Seq.filter (fun p' -> area.InBounds p') |> Seq.map (fun p' -> area.[p']) |> Seq.countBy id |> dict
     match a with
     | Open -> if around |> hasAtLeast 3 Trees then Trees else Open
     | Trees -> if around |> hasAtLeast 3 Lumberyard then Lumberyard else Trees
@@ -58,9 +57,9 @@ let update (area:XYGrid<Acre>) (min:int) =
     let rec loop (max:int) (r:int) (area':XYGrid<Acre>) (hashes:Map<int,int>) (found:bool) = 
         if r = max then area' 
         else           
-            let current = area'.CellSeqP |> List.ofSeq
+            let current = area'.CellSeqP 
             let area'' = XYGrid<Acre>((0,0),(49,49), Open)
-            current |> List.map (fun (p,_) -> (p, updateAcre area' p)) |> List.iter (fun (p,a') -> area''.[p] <- a')
+            current |> Seq.map (fun (p,_) -> (p, updateAcre area' p)) |> Seq.iter (fun (p,a') -> area''.[p] <- a')
             let r' = r+1
             if found then loop max r' area'' hashes true
             else    
