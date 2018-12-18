@@ -36,7 +36,10 @@ type XYGrid<'T>(min:Point, max:Point, init:'T) =
         }
     member __.InBounds (p:Point) =
         let (x,y) = p
-        x >= fst min && x <= fst max && y >= snd min && y <= snd max       
+        x >= fst min && x <= fst max && y >= snd min && y <= snd max   
+        
+let genHash (area:XYGrid<Acre>) =
+    area.CellSeqP |> Seq.map (fun e -> (hash e)) |> Seq.fold (fun s c -> (s*23)+c) 17
 
 let hasAtLeast (count:int) (key:'T) (dict:IDictionary<'T,int>) =
     match dict.TryGetValue key with
@@ -52,14 +55,26 @@ let updateAcre (area:XYGrid<Acre>) (p:Point) =
     | Lumberyard -> if around |> hasAtLeast 1 Lumberyard && around |> hasAtLeast 1 Trees then Lumberyard else Open
 
 let update (area:XYGrid<Acre>) (min:int) =
-    let rec loop (r:int) (area':XYGrid<Acre>) = 
-        if r = 0 then area' 
-        else
+    let rec loop (max:int) (r:int) (area':XYGrid<Acre>) (hashes:Map<int,int>) (found:bool) = 
+        if r = max then area' 
+        else           
             let current = area'.CellSeqP |> List.ofSeq
             let area'' = XYGrid<Acre>((0,0),(49,49), Open)
             current |> List.map (fun (p,_) -> (p, updateAcre area' p)) |> List.iter (fun (p,a') -> area''.[p] <- a')
-            loop (r-1) area''
-    loop min area
+            let r' = r+1
+            if found then loop max r' area'' hashes true
+            else    
+                let hash = area'' |> genHash
+                if hashes.ContainsKey hash then
+                    let prior = hashes.[hash]
+                    let cycle = r' - prior
+                    let remains = max - r'
+                    let max' = remains % cycle
+                    loop max' 0 area'' hashes true
+                else 
+                    let hashes'= hashes.Add (hash,r')
+                    loop max r' area'' hashes' false
+    loop min 0 area Map.empty false
 
 let private concatMap f (cells:seq<_>) =
     cells |> Seq.map f |> String.concat ""
@@ -81,13 +96,19 @@ let private parseLine (l:string) (y:int) =
         |  _  -> failwith "unknown char") 
 
 let execute = fun d -> 
-    let data = d |> Parsing.splitLines |> Seq.mapi (fun y l -> parseLine l y) |> Seq.concat
+    let data = d |> Parsing.splitLines |> Seq.mapi (fun y l -> parseLine l y) |> Seq.concat |> List.ofSeq
     let area = XYGrid<Acre>((0,0),(49,49), Open)
     data |> Seq.iter (fun (p,a) -> area.[p] <- a)
     let area' = update area 10
     let results = area'.CellSeqP |> Seq.map(fun (_,a) -> a) |> Seq.countBy id |> dict
-    printfn "%i" (results.[Trees]*results.[Lumberyard])
-    printMap area
+    printfn "Day 18 - Part 1: Value of %i" (results.[Trees]*results.[Lumberyard])
+
+    let area = XYGrid<Acre>((0,0),(49,49), Open)
+    data |> Seq.iter (fun (p,a) -> area.[p] <- a)
+    let area' = update area 1000000000
+    let results = area'.CellSeqP |> Seq.map(fun (_,a) -> a) |> Seq.countBy id |> dict
+    printfn "Day 18 - Part 2: Value of %i" (results.[Trees]*results.[Lumberyard])
+    //printMap area
 
 
 let dataSet = @"
