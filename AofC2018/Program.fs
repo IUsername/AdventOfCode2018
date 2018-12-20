@@ -35,6 +35,7 @@ let main argv =
            | "16" -> Sixteen.dataSet |> Sixteen.execute; true
            | "17" -> Seventeen.dataSet |> Seventeen.execute; true
            | "18" -> Eighteen.dataSet |> Eighteen.execute; true
+           | "19" -> Nineteen.dataSet |> Nineteen.execute; true
            | _ -> printfn "Value %s not matched" d; false
 
     let success = fun (s:bool,t:TimeSpan) -> 
